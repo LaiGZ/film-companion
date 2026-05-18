@@ -2,7 +2,12 @@
 数据库操作层 — 所有表的 CRUD（SQLite + PostgreSQL 兼容）
 """
 
+import hashlib
+import hmac
 import json
+import os
+import base64
+import time
 import uuid
 from datetime import date, datetime
 from typing import Any
@@ -26,6 +31,200 @@ def _to_json(obj) -> str:
     if obj is None:
         return "{}"
     return json.dumps(obj, ensure_ascii=False, default=str)
+
+
+# ============================================================
+# JWT 工具（纯 Python，无额外依赖）
+# ============================================================
+
+def _get_jwt_secret() -> str:
+    """获取 JWT 密钥，持久化到文件"""
+    secret_file = os.path.join(os.path.dirname(__file__), "..", "data", ".jwt_secret")
+    if os.path.exists(secret_file):
+        with open(secret_file) as f:
+            return f.read().strip()
+    # 第一次运行时生成
+    secret = uuid.uuid4().hex + uuid.uuid4().hex
+    os.makedirs(os.path.dirname(secret_file), exist_ok=True)
+    with open(secret_file, "w") as f:
+        f.write(secret)
+    return secret
+
+
+_JWT_SECRET = None
+
+
+def _jwt_secret() -> str:
+    global _JWT_SECRET
+    if _JWT_SECRET is None:
+        # 优先使用环境变量
+        env_secret = os.getenv("JWT_SECRET")
+        if env_secret:
+            _JWT_SECRET = env_secret
+        else:
+            _JWT_SECRET = _get_jwt_secret()
+    return _JWT_SECRET
+
+
+def _base64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def _base64url_decode(s: str) -> bytes:
+    padding = 4 - len(s) % 4
+    if padding != 4:
+        s += "=" * padding
+    return base64.urlsafe_b64decode(s)
+
+
+def _jwt_sign(payload: dict) -> str:
+    """HMAC-SHA256 签名 JWT"""
+    header = _base64url_encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    body = _base64url_encode(json.dumps(payload, separators=(",", ":")).encode())
+    sig = _base64url_encode(
+        hmac.new(
+            _jwt_secret().encode(),
+            f"{header}.{body}".encode(),
+            hashlib.sha256,
+        ).digest()
+    )
+    return f"{header}.{body}.{sig}"
+
+
+def _jwt_verify(token: str) -> dict | None:
+    """验证 JWT，返回 payload 或 None"""
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        header_b64, body_b64, sig_b64 = parts
+        expected_sig = _base64url_encode(
+            hmac.new(
+                _jwt_secret().encode(),
+                f"{header_b64}.{body_b64}".encode(),
+                hashlib.sha256,
+            ).digest()
+        )
+        if not hmac.compare_digest(sig_b64, expected_sig):
+            return None
+        payload = json.loads(_base64url_decode(body_b64))
+        # 检查过期
+        if payload.get("exp", 0) < time.time():
+            return None
+        return payload
+    except Exception:
+        return None
+
+
+# ============================================================
+# 密码工具
+# ============================================================
+
+def _hash_password(password: str) -> str:
+    """pbkdf2_hmac 哈希密码"""
+    salt = os.urandom(16)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100000)
+    # 格式: $algo$iterations$salt_b64$hash_b64
+    return f"$pbkdf2-sha256$100000${_base64url_encode(salt)}${_base64url_encode(key)}"
+
+
+def _check_password(password: str, hashed: str) -> bool:
+    """验证密码"""
+    try:
+        parts = hashed.split("$")
+        if len(parts) != 5:
+            return False
+        _, algo, iterations, salt_b64, hash_b64 = parts
+        salt = _base64url_decode(salt_b64)
+        key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, int(iterations))
+        return hmac.compare_digest(_base64url_encode(key), hash_b64)
+    except Exception:
+        return False
+
+
+# ============================================================
+# Token 生成
+# ============================================================
+
+def create_tokens(user_id: str, username: str, token_version: int) -> dict:
+    """生成 access_token (15分钟) + refresh_token (7天)"""
+    now = time.time()
+    access_payload = {
+        "sub": user_id,
+        "username": username,
+        "ver": token_version,
+        "exp": now + 900,        # 15分钟
+        "iat": now,
+        "type": "access",
+    }
+    refresh_payload = {
+        "sub": user_id,
+        "ver": token_version,
+        "exp": now + 604800,     # 7天
+        "iat": now,
+        "type": "refresh",
+    }
+    return {
+        "access_token": _jwt_sign(access_payload),
+        "refresh_token": _jwt_sign(refresh_payload),
+        "expires_in": 900,
+    }
+
+
+# ============================================================
+# 用户管理
+# ============================================================
+
+async def create_user(username: str, password: str) -> dict:
+    """注册新用户"""
+    uid = _uid()
+    hashed = _hash_password(password)
+    await execute(
+        "INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)",
+        uid, username, hashed
+    )
+    return {"id": uid, "username": username}
+
+
+async def get_user_by_username(username: str) -> dict | None:
+    """按用户名查询用户"""
+    rows = await execute("SELECT * FROM users WHERE username = ? AND status = 'active'", username)
+    return rows[0] if rows else None
+
+
+async def get_user_by_id(user_id: str) -> dict | None:
+    """按 ID 查询用户（不含密码）"""
+    rows = await execute(
+        "SELECT id, username, token_version, phone, status, created_at FROM users WHERE id = ?",
+        user_id
+    )
+    return rows[0] if rows else None
+
+
+async def verify_user_password(username: str, password: str) -> dict | None:
+    """验证用户密码，成功返回用户信息"""
+    user = await get_user_by_username(username)
+    if not user:
+        return None
+    if not _check_password(password, user["password_hash"]):
+        return None
+    return user
+
+
+async def increment_token_version(user_id: str) -> int:
+    """增加 token_version（单点登录：新登录使旧 token 失效）"""
+    await execute(
+        "UPDATE users SET token_version = token_version + 1, updated_at = datetime('now') WHERE id = ?",
+        user_id
+    )
+    rows = await execute("SELECT token_version FROM users WHERE id = ?", user_id)
+    return rows[0]["token_version"] if rows else 0
+
+
+async def get_token_version(user_id: str) -> int:
+    """获取当前 token_version"""
+    rows = await execute("SELECT token_version FROM users WHERE id = ?", user_id)
+    return rows[0]["token_version"] if rows else 0
 
 
 # ============================================================

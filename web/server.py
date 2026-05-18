@@ -10,7 +10,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -45,7 +45,6 @@ class AppState:
         self.session_id = None
         self.turn_index = 0
         self.user_count = 0
-        self.user_id = "web_user"
 
 
 state = AppState()
@@ -79,6 +78,10 @@ app = FastAPI(
 web_dir = os.path.join(os.path.dirname(__file__))
 app.mount("/static", StaticFiles(directory=web_dir), name="static")
 
+# 注册认证路由
+from web.auth import router as auth_router, get_current_user
+app.include_router(auth_router)
+
 
 # ============================================================
 # 页面路由
@@ -108,10 +111,10 @@ async def data_page():
 # 辅助：构建 system prompt
 # ============================================================
 
-async def _build_system_prompt() -> str:
+async def _build_system_prompt(user_id: str) -> str:
     """构建当前会话的 system prompt"""
     from memory.long_term import load_memories_for_session
-    memories_text = await load_memories_for_session(state.user_id)
+    memories_text = await load_memories_for_session(user_id)
 
     available_tools = json.dumps(
         state.plugin_registry.get_tool_descriptions(),
@@ -166,20 +169,30 @@ async def _build_system_prompt() -> str:
 # ============================================================
 
 @app.get("/api/sessions")
-async def list_sessions(limit: int = Query(50)):
+async def list_sessions(
+    limit: int = Query(50),
+    current_user: dict = Depends(get_current_user),
+):
     """获取会话列表"""
     from db.schema import list_sessions
-    sessions = await list_sessions(user_id=state.user_id, limit=limit)
+    sessions = await list_sessions(user_id=current_user["id"], limit=limit)
     return {"status": "ok", "sessions": sessions}
 
 
 @app.get("/api/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """获取单个会话详情"""
     from db.schema import get_session_by_id, get_recent_messages
     sess = await get_session_by_id(session_id)
     if not sess:
         raise HTTPException(status_code=404, detail="会话不存在")
+
+    # 数据权限：只能查看自己的会话
+    if sess["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="无权访问该会话")
 
     msgs = await get_recent_messages(session_id, 200)
     # 只保留 user 和 assistant 消息，供前端展示
@@ -198,16 +211,25 @@ async def get_session(session_id: str):
 
 
 @app.post("/api/sessions")
-async def create_session():
+async def create_session(current_user: dict = Depends(get_current_user)):
     """创建新会话"""
     from memory.context import init_session
-    session_id = await init_session(user_id=state.user_id, platform="web")
+    session_id = await init_session(user_id=current_user["id"], platform="web")
     return {"status": "ok", "session_id": session_id}
 
 
 @app.delete("/api/sessions/{session_id}")
-async def delete_session(session_id: str):
-    """删除会话"""
+async def delete_session(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """删除会话（只能删除自己的）"""
+    from db.schema import get_session_by_id
+    sess = await get_session_by_id(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    if sess["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="无权删除该会话")
     from db.pool import execute
     await execute("DELETE FROM chat_message WHERE session_id = ?", session_id)
     await execute("DELETE FROM chat_session WHERE id = ?", session_id)
@@ -218,14 +240,14 @@ async def delete_session(session_id: str):
 # SSE 流式聊天 — 核心接口
 # ============================================================
 
-async def _chat_event_stream(session_id: str, user_input: str):
+async def _chat_event_stream(session_id: str, user_input: str, user_id: str):
     """SSE 事件生成器 — 处理多轮对话（含工具调用）"""
     from memory.context import record_user_message, record_assistant_message, get_context
     from memory.context import record_tool_call, record_tool_result
     from plugins.film import tools as film_tools
     from plugins.gear import tools as gear_tools
 
-    system_prompt = await _build_system_prompt()
+    system_prompt = await _build_system_prompt(user_id)
     context = await get_context(session_id)
     current_messages = context + [{"role": "user", "content": user_input}]
 
@@ -253,13 +275,13 @@ async def _chat_event_stream(session_id: str, user_input: str):
     from plugins.gear import tools as gear_tools
     from plugins.shoot import tools as shoot_tools
     film_tools.set_context(
-        user_id=state.user_id, session_id=session_id, message_id=msg_id
+        user_id=user_id, session_id=session_id, message_id=msg_id
     )
     gear_tools.set_context(
-        user_id=state.user_id, session_id=session_id, message_id=msg_id
+        user_id=user_id, session_id=session_id, message_id=msg_id
     )
     shoot_tools.set_context(
-        user_id=state.user_id, session_id=session_id, message_id=msg_id
+        user_id=user_id, session_id=session_id, message_id=msg_id
     )
 
     max_rounds = 5  # 最多 5 轮工具调用
@@ -301,7 +323,7 @@ async def _chat_event_stream(session_id: str, user_input: str):
                         from db.schema import get_recent_messages as _get_msgs
                         recent = await _get_msgs(session_id, 20)
                         asyncio.create_task(
-                            extract_memories(state.user_id, recent, state.llm_provider)
+                            extract_memories(user_id, recent, state.llm_provider)
                         )
                     return
 
@@ -367,16 +389,21 @@ async def _chat_event_stream(session_id: str, user_input: str):
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(
+    request: ChatRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """SSE 流式聊天 — 长连接，逐 token 推送"""
     if not state.llm_provider or not state.plugin_registry:
         raise HTTPException(status_code=503, detail="服务未就绪，请等待初始化完成")
+
+    user_id = current_user["id"]
 
     # 初始化或复用会话
     session_id = request.session_id or state.session_id
     if not session_id:
         from memory.context import init_session
-        session_id = await init_session(user_id=state.user_id, platform="web")
+        session_id = await init_session(user_id=user_id, platform="web")
         state.session_id = session_id
 
     user_input = request.message.strip()
@@ -384,7 +411,7 @@ async def chat_stream(request: ChatRequest):
         raise HTTPException(status_code=400, detail="消息不能为空")
 
     return StreamingResponse(
-        _chat_event_stream(session_id, user_input),
+        _chat_event_stream(session_id, user_input, user_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -399,15 +426,20 @@ async def chat_stream(request: ChatRequest):
 # ============================================================
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """兼容旧版聊天 API — 非流式版本"""
     if not state.llm_provider or not state.plugin_registry:
         raise HTTPException(status_code=503, detail="服务未就绪，请等待初始化完成")
 
+    user_id = current_user["id"]
+
     session_id = request.session_id or state.session_id
     if not session_id:
         from memory.context import init_session
-        session_id = await init_session(user_id=state.user_id, platform="web")
+        session_id = await init_session(user_id=user_id, platform="web")
         state.session_id = session_id
 
     user_input = request.message.strip()
@@ -417,7 +449,7 @@ async def chat(request: ChatRequest):
     # 收集 SSE 流的结果
     full_reply = ""
     tool_names = []
-    async for event in _chat_event_stream(session_id, user_input):
+    async for event in _chat_event_stream(session_id, user_input, user_id):
         if event.startswith("data: "):
             data = json.loads(event[6:])
             if data["type"] == "token":
@@ -446,10 +478,12 @@ async def list_film(
     sort: str = Query("created_at"),
     order: str = Query("DESC"),
     limit: int = Query(100),
+    current_user: dict = Depends(get_current_user),
 ):
     """查询胶卷列表"""
     from db.schema import query_film
 
+    user_id = current_user["id"]
     filters = {}
     if film_type:
         filters["film_type"] = film_type
@@ -459,7 +493,7 @@ async def list_film(
         filters["iso__gte"] = iso_min
 
     result = await query_film(
-        user_id=state.user_id,
+        user_id=user_id,
         filters=filters,
         order_by=sort,
         order_dir=order,
@@ -492,10 +526,12 @@ async def list_gear(
     sort: str = Query("created_at"),
     order: str = Query("DESC"),
     limit: int = Query(100),
+    current_user: dict = Depends(get_current_user),
 ):
     """查询设备列表"""
     from db.schema import query_gear
 
+    user_id = current_user["id"]
     filters = {}
     if gear_type:
         filters["gear_type"] = gear_type
@@ -505,7 +541,7 @@ async def list_gear(
         filters["status"] = status
 
     result = await query_gear(
-        user_id=state.user_id,
+        user_id=user_id,
         filters=filters,
         order_by=sort,
         order_dir=order,
@@ -516,12 +552,13 @@ async def list_gear(
 
 
 @app.get("/api/stats")
-async def get_stats():
+async def get_stats(current_user: dict = Depends(get_current_user)):
     """获取统计数据"""
     from db.schema import query_film, query_gear
 
-    films = await query_film(state.user_id, limit=10000)
-    gear_list = await query_gear(state.user_id, limit=10000)
+    user_id = current_user["id"]
+    films = await query_film(user_id, limit=10000)
+    gear_list = await query_gear(user_id, limit=10000)
 
     film_count = len(films)
     gear_count = len(gear_list)

@@ -152,5 +152,23 @@ CREATE TABLE IF NOT EXISTS long_term_memory (
 );
 
 CREATE INDEX idx_memory_user ON long_term_memory(user_id);
-CREATE INDEX idx_memory_type ON long_term_memory(memory_type);
-CREATE INDEX idx_memory_active ON long_term_memory(is_active);
+CREATE INDEX IF NOT EXISTS idx_memory_type ON long_term_memory(memory_type);
+CREATE INDEX IF NOT EXISTS idx_memory_active ON long_term_memory(is_active);
+
+-- 8. 用户表
+CREATE TABLE IF NOT EXISTS users (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username        VARCHAR(64) UNIQUE NOT NULL,
+    password_hash   TEXT NOT NULL,
+    token_version   INTEGER DEFAULT 1,
+    phone           VARCHAR(20),
+    status          VARCHAR(20) DEFAULT 'active',
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+-- 9. 装卷事件的 user_id 索引
+CREATE INDEX IF NOT EXISTS idx_film_loading_user ON film_loading(user_id);
+CREATE INDEX IF NOT EXISTS idx_shoot_gear_user ON shoot_gear(user_id);

@@ -50,6 +50,8 @@
   .title { font-size: 18px; font-weight: 600; }
 
   .nav-links { display: flex; gap: 8px; }
+  .header-right { display: flex; align-items: center; gap: 6px; }
+  .user-info { display: flex; align-items: center; gap: 8px; }
   .nav-link {
     color: var(--text2);
     text-decoration: none;
@@ -293,6 +295,60 @@
     th, td { padding: 8px 10px; font-size: 13px; }
   }
 </style>
+
+<!-- ===== 登录弹窗 CSS ===== -->
+<style>
+  .auth-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 999;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .auth-overlay.show { display: block; }
+  .auth-modal {
+    display: none;
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    width: 360px;
+    max-width: 90vw;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px 28px 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .auth-modal.show { display: block; }
+  .auth-modal-logo { text-align: center; font-size: 40px; margin-bottom: 4px; }
+  .auth-modal-title { text-align: center; font-size: 20px; font-weight: 600; margin-bottom: 24px; }
+  .auth-form { display: flex; flex-direction: column; gap: 14px; }
+  .auth-form label { font-size: 13px; color: var(--text2); font-weight: 500; }
+  .auth-form input {
+    width: 100%; padding: 10px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 15px; font-family: inherit;
+    outline: none;
+    box-sizing: border-box;
+  }
+  .auth-form input:focus { border-color: var(--primary); }
+  .auth-btn {
+    width: 100%; padding: 11px;
+    background: var(--primary); color: white;
+    border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 600;
+    cursor: pointer; margin-top: 4px;
+  }
+  .auth-btn:hover { opacity: 0.9; }
+  .auth-error { color: var(--danger); font-size: 13px; text-align: center; min-height: 20px; }
+  .auth-switch { text-align: center; font-size: 13px; color: var(--text2); margin-top: 8px; }
+  .auth-switch a { color: var(--primary); cursor: pointer; text-decoration: none; font-weight: 500; }
+</style>
 </head>
 <body>
 
@@ -303,8 +359,31 @@
     <div class="title">胶片伴侣 AI</div>
   </div>
   <div class="nav-links">
+    <div class="user-info" id="userInfo"></div>
     <a href="/" class="nav-link">💬 对话</a>
     <a href="/data" class="nav-link active">📊 数据</a>
+  </div>
+</div>
+
+<!-- 登录弹窗 -->
+<div class="auth-overlay" id="authOverlay" onclick="if(event.target===this)Auth.close()"></div>
+<div class="auth-modal" id="authModal">
+  <div class="auth-modal-logo">🎞️</div>
+  <div class="auth-modal-title" id="authModalTitle">登录</div>
+  <div class="auth-form" id="loginForm">
+    <div><label>用户名</label><input type="text" id="loginUsername" placeholder="输入用户名" autocomplete="username"></div>
+    <div><label>密码</label><input type="password" id="loginPassword" placeholder="输入密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')Auth.login()"></div>
+    <div class="auth-error" id="authError"></div>
+    <button class="auth-btn" onclick="Auth.login()">登 录</button>
+    <div class="auth-switch">还没有账号？<a onclick="Auth.switchMode('register')">注册 →</a></div>
+  </div>
+  <div class="auth-form" id="registerForm" style="display:none">
+    <div><label>用户名</label><input type="text" id="regUsername" placeholder="2-32个字符" autocomplete="off"></div>
+    <div><label>密码</label><input type="password" id="regPassword" placeholder="至少6位" autocomplete="new-password"></div>
+    <div><label>确认密码</label><input type="password" id="regConfirm" placeholder="再次输入密码" autocomplete="new-password" onkeydown="if(event.key==='Enter')Auth.register()"></div>
+    <div class="auth-error" id="authError"></div>
+    <button class="auth-btn" onclick="Auth.register()">注 册</button>
+    <div class="auth-switch"><a onclick="Auth.switchMode('login')">← 返回登录</a></div>
   </div>
 </div>
 
@@ -661,11 +740,144 @@ function switchTab(tab) {
 }
 
 // ============================================================
+// Auth 模块（精简版 — 仅 Token + fetch 拦截）
+// ============================================================
+
+const Auth = {
+  init() {
+    this._patchFetch();
+    if (!localStorage.getItem('access_token')) {
+      window.location.href = '/';  // 未登录，跳回主页（会弹出登录框）
+      return false;
+    }
+    this._updateUI();
+    return true;
+  },
+  _updateUI() {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const el = document.getElementById('userInfo');
+    if (el && user.username) {
+      el.innerHTML = `<span style="font-size:13px;color:var(--text2)">👤 ${user.username}</span>`;
+    }
+  },
+  switchMode(mode) {
+    const isLogin = mode === 'login';
+    document.getElementById('loginForm').style.display = isLogin ? '' : 'none';
+    document.getElementById('registerForm').style.display = isLogin ? 'none' : '';
+    document.getElementById('authModalTitle').textContent = isLogin ? '登录' : '注册';
+    document.getElementById('authError').textContent = '';
+  },
+  open(mode) {
+    document.getElementById('authModal').classList.add('show');
+    document.getElementById('authOverlay').classList.add('show');
+    this.switchMode(mode || 'login');
+  },
+  close() {
+    document.getElementById('authModal').classList.remove('show');
+    document.getElementById('authOverlay').classList.remove('show');
+  },
+  async login() {
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    document.getElementById('authError').textContent = '';
+    if (!username || !password) { document.getElementById('authError').textContent = '请输入用户名和密码'; return; }
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (data.status !== 'ok') { document.getElementById('authError').textContent = data.detail || '登录失败'; return; }
+      localStorage.setItem('access_token', data.access_token);
+      localStorage.setItem('refresh_token', data.refresh_token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      this.close();
+      this._updateUI();
+      loadStats();
+      loadData();
+    } catch (err) { document.getElementById('authError').textContent = '网络错误，请重试'; }
+  },
+  async register() {
+    const username = document.getElementById('regUsername').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const confirm = document.getElementById('regConfirm').value;
+    document.getElementById('authError').textContent = '';
+    if (!username || !password) { document.getElementById('authError').textContent = '请输入用户名和密码'; return; }
+    if (password.length < 6) { document.getElementById('authError').textContent = '密码至少6位'; return; }
+    if (password !== confirm) { document.getElementById('authError').textContent = '两次密码不一致'; return; }
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (data.status !== 'ok') { document.getElementById('authError').textContent = data.detail || '注册失败'; return; }
+      localStorage.setItem('access_token', data.access_token);
+      localStorage.setItem('refresh_token', data.refresh_token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      this.close();
+      this._updateUI();
+      loadStats();
+      loadData();
+    } catch (err) { document.getElementById('authError').textContent = '网络错误，请重试'; }
+  },
+  _refreshing: null,
+  async _ensureToken() {
+    const token = localStorage.getItem('access_token');
+    if (!token) { window.location.href = '/'; return null; }
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload.exp * 1000 > Date.now() + 60000) return token;
+    } catch (e) {}
+    if (!this._refreshing) {
+      this._refreshing = (async () => {
+        const rt = localStorage.getItem('refresh_token');
+        if (!rt) throw new Error('no_rt');
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: rt }),
+        });
+        if (!res.ok) throw new Error('refresh_fail');
+        const data = await res.json();
+        localStorage.setItem('access_token', data.access_token);
+      })();
+    }
+    try { await this._refreshing; }
+    finally { this._refreshing = null; }
+    return localStorage.getItem('access_token');
+  },
+  _patchFetch() {
+    const _orig = window.fetch;
+    const self = this;
+    window.fetch = async function(url, opts = {}) {
+      const urlStr = (typeof url === 'string' ? url : url.url) || '';
+      if (urlStr.includes('/api/auth/')) return _orig.call(window, url, opts);
+      opts = opts || {}; opts.headers = opts.headers || {};
+      try {
+        const token = await self._ensureToken();
+        if (token) opts.headers = { ...opts.headers, 'Authorization': 'Bearer ' + token };
+      } catch (e) {}
+      const res = await _orig.call(window, url, opts);
+      if (res.status === 401) {
+        localStorage.clear();
+        window.location.href = '/';
+      }
+      return res;
+    };
+  },
+};
+
+// ============================================================
 // 初始化
 // ============================================================
 
-loadStats();
-loadData();
+if (Auth.init()) {
+  loadStats();
+  loadData();
+}
 </script>
 
 </body>

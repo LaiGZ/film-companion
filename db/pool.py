@@ -306,6 +306,26 @@ def _init_sqlite_schema(conn: sqlite3.Connection):
     except sqlite3.OperationalError:
         pass  # 索引已存在
 
+    # ========== users 表 ==========
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                token_version INTEGER DEFAULT 1,
+                phone TEXT,
+                status TEXT DEFAULT 'active',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        # 给 film_loading 和 shoot_gear 加 user_id 索引（已有字段）
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_loading_user ON film_loading(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_shoot_gear_user ON shoot_gear(user_id)")
+    except sqlite3.OperationalError:
+        pass
+
     conn.commit()
 
 
