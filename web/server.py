@@ -194,7 +194,7 @@ async def get_session(session_id: str):
                 "turn_index": m["turn_index"],
             })
 
-    return {"status": "ok", "session": sess, "messages": display_msgs}
+    return {"status": "ok", "session": sess, "messages": display_msgs[::-1]}
 
 
 @app.post("/api/sessions")

@@ -705,6 +705,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
 <script>
 // ============================================================
 // 状态
@@ -772,7 +773,12 @@ function addMessage(role, content) {
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  bubble.textContent = content;
+  // AI 消息渲染 Markdown，用户消息保持纯文本
+  if (role === 'assistant' && typeof marked !== 'undefined') {
+    bubble.innerHTML = marked.parse(content);
+  } else {
+    bubble.textContent = content;
+  }
 
   div.appendChild(avatar);
   div.appendChild(bubble);
@@ -826,6 +832,7 @@ function getStreamBubble() {
 }
 
 let streamBubble = null;
+let streamRawText = '';
 
 function appendStreamToken(text) {
   hideWelcome();
@@ -836,7 +843,9 @@ function appendStreamToken(text) {
   const cursor = streamBubble.querySelector('.cursor-blink');
   if (cursor) cursor.remove();
 
-  streamBubble.textContent += text;
+  streamRawText += text;
+  // 流式过程中显示纯文本（等完成后再渲染 Markdown）
+  streamBubble.textContent = streamRawText;
 
   // 加回光标
   const blinkSpan = document.createElement('span');
@@ -850,7 +859,12 @@ function finalizeStream() {
   if (streamBubble) {
     const cursor = streamBubble.querySelector('.cursor-blink');
     if (cursor) cursor.remove();
+    // 流式完成后渲染 Markdown
+    if (typeof marked !== 'undefined' && streamRawText) {
+      streamBubble.innerHTML = marked.parse(streamRawText);
+    }
     streamBubble = null;
+    streamRawText = '';
   }
 }
 
