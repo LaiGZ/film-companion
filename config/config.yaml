@@ -1,0 +1,20 @@
+# 胶片伴侣 AI - 配置文件
+
+llm:
+  provider: deepseek          # openai / claude / deepseek
+  model: deepseek-v4-flash    # gpt-4o / claude-sonnet-4-20250514 / deepseek-v4-flash
+  temperature: 0.3
+  max_tokens: 4000
+
+database:
+  url: postgresql+asyncpg://filmuser:filmpass@localhost:5432/film_companion
+  pool_size: 5
+  max_overflow: 10
+
+memory:
+  short_term_max_rounds: 20   # 短期上下文保留轮次
+  enable_long_term: true      # 启用长期记忆
+
+plugins:
+  auto_load: true             # 自动加载 plugins/ 下的所有插件
+  dir: plugins

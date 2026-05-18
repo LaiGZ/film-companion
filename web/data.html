@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>胶片伴侣 AI - 数据</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #1e2a4a;
+    --primary: #e94560;
+    --accent: #f5a623;
+    --text: #eaeaea;
+    --text2: #a0a0b0;
+    --border: #2a3a6a;
+    --success: #4caf50;
+    --warning: #f5a623;
+    --danger: #e94560;
+    --info: #4fc3f7;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* 导航 */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo { font-size: 24px; }
+  .title { font-size: 18px; font-weight: 600; }
+
+  .nav-links { display: flex; gap: 8px; }
+  .nav-link {
+    color: var(--text2);
+    text-decoration: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+  .nav-link:hover, .nav-link.active {
+    background: var(--surface2);
+    color: var(--text);
+  }
+  .nav-link.active { border-bottom: 2px solid var(--primary); }
+
+  /* 主容器 */
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  /* 统计卡片 */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .stat-icon { font-size: 28px; margin-bottom: 8px; }
+  .stat-value { font-size: 28px; font-weight: 700; }
+  .stat-label { font-size: 13px; color: var(--text2); margin-top: 4px; }
+
+  /* Tab 切换 */
+  .tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 0;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .tab {
+    padding: 12px 24px;
+    cursor: pointer;
+    color: var(--text2);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+    font-size: 15px;
+    font-weight: 500;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+  }
+
+  /* 筛选栏 */
+  .filter-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    padding: 16px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .filter-bar select, .filter-bar input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+  }
+
+  .filter-bar select:focus, .filter-bar input:focus {
+    border-color: var(--primary);
+  }
+
+  .filter-bar .refresh-btn {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    margin-left: auto;
+  }
+
+  .filter-bar .refresh-btn:hover {
+    opacity: 0.9;
+  }
+
+  /* 表格 */
+  .table-container {
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  th {
+    background: var(--surface2);
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  th:hover {
+    background: #25335a;
+  }
+
+  th .sort-icon {
+    margin-left: 4px;
+    opacity: 0.4;
+  }
+
+  th.sorted .sort-icon {
+    opacity: 1;
+    color: var(--primary);
+  }
+
+  td {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  tr:hover td {
+    background: rgba(233, 69, 96, 0.05);
+  }
+
+  /* 状态徽章 */
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .badge-used { background: rgba(76, 175, 80, 0.2); color: var(--success); }
+  .badge-shooting { background: rgba(79, 195, 247, 0.2); color: var(--info); }
+  .badge-warning { background: rgba(245, 166, 35, 0.2); color: var(--warning); }
+  .badge-expired { background: rgba(233, 69, 96, 0.2); color: var(--danger); }
+  .badge-ok { background: rgba(76, 175, 80, 0.2); color: var(--success); }
+  .badge-inactive { background: rgba(160, 160, 176, 0.2); color: var(--text2); }
+
+  /* 空状态 */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text2);
+  }
+
+  .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+  .empty-state p { font-size: 15px; }
+
+  /* JSON 元数据 */
+  .meta-cell {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    color: var(--text2);
+    font-size: 13px;
+  }
+
+  .meta-cell:hover {
+    color: var(--accent);
+  }
+
+  /* 过期标签 */
+  .expiry-label {
+    font-size: 12px;
+  }
+  .expiry-label.warning { color: var(--warning); }
+  .expiry-label.danger { color: var(--danger); }
+
+  /* 加载 */
+  .loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text2);
+  }
+
+  .pagination {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px;
+  }
+
+  .page-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .page-btn:hover { background: var(--user-bubble); }
+  .page-btn.active { background: var(--primary); border-color: var(--primary); }
+
+  @media (max-width: 768px) {
+    .container { padding: 16px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    th, td { padding: 8px 10px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<div class="header">
+  <div class="header-left">
+    <span class="logo">🎞️</span>
+    <div class="title">胶片伴侣 AI</div>
+  </div>
+  <div class="nav-links">
+    <a href="/" class="nav-link">💬 对话</a>
+    <a href="/data" class="nav-link active">📊 数据</a>
+  </div>
+</div>
+
+<!-- 主容器 -->
+<div class="container">
+  <!-- 统计卡片 -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+      <div class="stat-icon">🎞️</div>
+      <div class="stat-value" id="filmCount">-</div>
+      <div class="stat-label">胶卷总数</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📷</div>
+      <div class="stat-value" id="gearCount">-</div>
+      <div class="stat-label">设备总数</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">💰</div>
+      <div class="stat-value" id="totalValue">-</div>
+      <div class="stat-label">总价值</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">⚠️</div>
+      <div class="stat-value" id="expiringCount">-</div>
+      <div class="stat-label">快过期/已过期</div>
+    </div>
+  </div>
+
+  <!-- Tab -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('film')">🎞️ 胶卷</div>
+    <div class="tab" onclick="switchTab('gear')">📷 设备</div>
+  </div>
+
+  <!-- 筛选栏 -->
+  <div class="filter-bar" id="filterBar">
+    <select id="statusFilter">
+      <option value="">全部状态</option>
+      <option value="未使用">未使用</option>
+      <option value="已拍摄">已拍摄</option>
+      <option value="已冲洗">已冲洗</option>
+      <option value="已扫描">已扫描</option>
+      <option value="已使用">已使用</option>
+    </select>
+    <select id="typeFilter">
+      <option value="">全部类型</option>
+      <option value="彩色反转片">彩色反转片</option>
+      <option value="彩色负片">彩色负片</option>
+      <option value="黑白负片">黑白负片</option>
+      <option value="电影卷">电影卷</option>
+    </select>
+    <button class="refresh-btn" onclick="loadData()">🔄 刷新</button>
+  </div>
+
+  <!-- 表格 -->
+  <div class="table-container" id="tableContainer">
+    <div class="loading" id="loadingIndicator">加载中...</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 状态
+// ============================================================
+let currentTab = 'film';
+let currentSort = { field: 'created_at', dir: 'DESC' };
+
+// ============================================================
+// 数据加载
+// ============================================================
+
+async function loadStats() {
+  try {
+    const resp = await fetch('/api/stats');
+    const data = await resp.json();
+    if (data.status !== 'ok') return;
+
+    const s = data.stats;
+    document.getElementById('filmCount').textContent = s.film_count;
+    document.getElementById('gearCount').textContent = s.gear_count;
+    document.getElementById('totalValue').textContent = `¥${s.total_value.toLocaleString()}`;
+    document.getElementById('expiringCount').textContent = `${s.expired_count + s.expiring_count}`;
+  } catch (err) {
+    console.error('加载统计失败:', err);
+  }
+}
+
+async function loadData() {
+  const container = document.getElementById('tableContainer');
+  container.innerHTML = '<div class="loading">加载中...</div>';
+
+  const statusEl = document.getElementById('statusFilter');
+  const typeEl = document.getElementById('typeFilter');
+
+  try {
+    let url;
+    if (currentTab === 'film') {
+      const params = new URLSearchParams();
+      if (statusEl.value) params.set('status', statusEl.value);
+      if (typeEl.value) params.set('film_type', typeEl.value);
+      params.set('sort', currentSort.field);
+      params.set('order', currentSort.dir);
+      params.set('limit', '500');
+      url = `/api/film?${params.toString()}`;
+    } else {
+      const params = new URLSearchParams();
+      if (statusEl.value) params.set('status', statusEl.value);
+      if (typeEl.value) params.set('gear_type', typeEl.value);
+      params.set('sort', currentSort.field);
+      params.set('order', currentSort.dir);
+      params.set('limit', '500');
+      url = `/api/gear?${params.toString()}`;
+    }
+
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if (data.status !== 'ok') {
+      container.innerHTML = `<div class="empty-state"><p>❌ 加载失败</p></div>`;
+      return;
+    }
+
+    if (currentTab === 'film') {
+      renderFilmTable(data.films);
+    } else {
+      renderGearTable(data.gear);
+    }
+  } catch (err) {
+    container.innerHTML = `<div class="empty-state"><p>❌ 错误: ${err.message}</p></div>`;
+  }
+}
+
+// ============================================================
+// 胶卷表格渲染
+// ============================================================
+
+function renderFilmTable(films) {
+  const container = document.getElementById('tableContainer');
+
+  if (!films || films.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">🎞️</div>
+        <p>还没有胶卷记录<br>去 <a href="/" style="color:var(--primary)">对话页面</a> 录入吧</p>
+      </div>`;
+    return;
+  }
+
+  let html = `<table>
+    <thead><tr>
+      <th onclick="sortBy('name')">型号 ${getSortIcon('name')}</th>
+      <th>类型</th>
+      <th onclick="sortBy('iso')">ISO ${getSortIcon('iso')}</th>
+      <th>格式</th>
+      <th onclick="sortBy('quantity')">数量 ${getSortIcon('quantity')}</th>
+      <th>状态</th>
+      <th onclick="sortBy('expiry_date')">到期日 ${getSortIcon('expiry_date')}</th>
+      <th onclick="sortBy('price')">价格 ${getSortIcon('price')}</th>
+      <th>存放</th>
+      <th>备注</th>
+    </tr></thead>
+    <tbody>`;
+
+  for (const f of films) {
+    const statusBadge = getFilmStatusBadge(f.status);
+    const expiryBadge = getExpiryBadge(f.expiry_status, f.days_left);
+    const metaStr = f.meta ? Object.entries(f.meta).map(([k,v]) => `${k}: ${v}`).join(', ') : '';
+
+    html += `<tr>
+      <td><strong>${escapeHtml(f.name)}</strong></td>
+      <td>${escapeHtml(f.film_type || '-')}</td>
+      <td>${f.iso ? `ISO ${f.iso}` : '-'}</td>
+      <td>${f.format || '135'}</td>
+      <td>${f.quantity} ${f.unit || '卷'}</td>
+      <td>${statusBadge}</td>
+      <td>${f.expiry_date ? `${f.expiry_date}<br>${expiryBadge}` : '-'}</td>
+      <td>${f.price ? `¥${f.price}` : '-'}</td>
+      <td>${escapeHtml(f.storage_location || '-')}</td>
+      <td><span class="meta-cell" title="${escapeHtml(metaStr)}">${metaStr ? metaStr.substring(0, 30) + '...' : '-'}</span></td>
+    </tr>`;
+  }
+
+  html += `</tbody></table>
+    <div style="padding:12px 16px;font-size:13px;color:var(--text2);border-top:1px solid var(--border);">
+      共 ${films.length} 条记录
+    </div>`;
+
+  container.innerHTML = html;
+}
+
+// ============================================================
+// 设备表格渲染
+// ============================================================
+
+function renderGearTable(gearList) {
+  const container = document.getElementById('tableContainer');
+
+  if (!gearList || gearList.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">📷</div>
+        <p>还没有设备记录<br>去 <a href="/" style="color:var(--primary)">对话页面</a> 录入吧</p>
+      </div>`;
+    return;
+  }
+
+  let html = `<table>
+    <thead><tr>
+      <th onclick="sortBy('name')">名称 ${getSortIcon('name')}</th>
+      <th>类型</th>
+      <th>品牌</th>
+      <th>型号</th>
+      <th onclick="sortBy('status')">状态 ${getSortIcon('status')}</th>
+      <th>成色</th>
+      <th onclick="sortBy('price')">价格 ${getSortIcon('price')}</th>
+      <th onclick="sortBy('purchase_date')">购买日期 ${getSortIcon('purchase_date')}</th>
+      <th>存放</th>
+      <th>备注</th>
+    </tr></thead>
+    <tbody>`;
+
+  for (const g of gearList) {
+    const statusBadge = getGearStatusBadge(g.status);
+    const metaStr = g.meta ? Object.entries(g.meta).map(([k,v]) => {
+      if (typeof v === 'object') return `${k}: ${JSON.stringify(v).substring(0,20)}`;
+      return `${k}: ${v}`;
+    }).join(', ') : '';
+
+    html += `<tr>
+      <td><strong>${escapeHtml(g.name)}</strong></td>
+      <td>${escapeHtml(g.gear_type)}</td>
+      <td>${escapeHtml(g.brand || '-')}</td>
+      <td>${escapeHtml(g.model || '-')}</td>
+      <td>${statusBadge}</td>
+      <td>${g.condition || '-'}</td>
+      <td>${g.price ? `¥${g.price}` : '-'}</td>
+      <td>${g.purchase_date || '-'}</td>
+      <td>${escapeHtml(g.storage_location || '-')}</td>
+      <td><span class="meta-cell" title="${escapeHtml(metaStr)}">${metaStr ? metaStr.substring(0, 25) + '...' : '-'}</span></td>
+    </tr>`;
+  }
+
+  html += `</tbody></table>
+    <div style="padding:12px 16px;font-size:13px;color:var(--text2);border-top:1px solid var(--border);">
+      共 ${gearList.length} 件设备
+    </div>`;
+
+  container.innerHTML = html;
+}
+
+// ============================================================
+// 辅助函数
+// ============================================================
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function getFilmStatusBadge(status) {
+  const map = {
+    '未使用': '<span class="badge badge-ok">📦 未使用</span>',
+    '已拍摄': '<span class="badge badge-shooting">📸 已拍摄</span>',
+    '已冲洗': '<span class="badge badge-warning">🧪 已冲洗</span>',
+    '已扫描': '<span class="badge badge-ok">🖥️ 已扫描</span>',
+    '已使用': '<span class="badge badge-inactive">✅ 已使用</span>',
+  };
+  return map[status] || `<span class="badge badge-inactive">${status}</span>`;
+}
+
+function getGearStatusBadge(status) {
+  const map = {
+    '在用': '<span class="badge badge-ok">🟢 在用</span>',
+    '闲置': '<span class="badge badge-warning">🟡 闲置</span>',
+    '待出': '<span class="badge badge-shooting">📤 待出</span>',
+    '已出': '<span class="badge badge-inactive">🚫 已出</span>',
+    '维修中': '<span class="badge badge-expired">🔧 维修中</span>',
+  };
+  return map[status] || `<span class="badge badge-inactive">${status}</span>`;
+}
+
+function getExpiryBadge(status, daysLeft) {
+  if (status === 'expired') {
+    return `<span class="expiry-label danger">🔴 已过期 ${Math.abs(daysLeft)} 天</span>`;
+  }
+  if (status === 'expiring') {
+    return `<span class="expiry-label warning">🟡 还剩 ${daysLeft} 天</span>`;
+  }
+  return `<span class="expiry-label" style="color:var(--text2)">${daysLeft !== undefined ? `${daysLeft} 天` : ''}</span>`;
+}
+
+function getSortIcon(field) {
+  if (currentSort.field !== field) return '↕';
+  return currentSort.dir === 'ASC' ? '↑' : '↓';
+}
+
+function sortBy(field) {
+  if (currentSort.field === field) {
+    currentSort.dir = currentSort.dir === 'ASC' ? 'DESC' : 'ASC';
+  } else {
+    currentSort.field = field;
+    currentSort.dir = 'DESC';
+  }
+  loadData();
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab')[tab === 'film' ? 0 : 1].classList.add('active');
+
+  // 更新筛选选项
+  const statusEl = document.getElementById('statusFilter');
+  const typeEl = document.getElementById('typeFilter');
+
+  if (tab === 'film') {
+    statusEl.innerHTML = `
+      <option value="">全部状态</option>
+      <option value="未使用">未使用</option>
+      <option value="已拍摄">已拍摄</option>
+      <option value="已冲洗">已冲洗</option>
+      <option value="已扫描">已扫描</option>
+      <option value="已使用">已使用</option>`;
+    typeEl.innerHTML = `
+      <option value="">全部类型</option>
+      <option value="彩色反转片">彩色反转片</option>
+      <option value="彩色负片">彩色负片</option>
+      <option value="黑白负片">黑白负片</option>
+      <option value="电影卷">电影卷</option>`;
+  } else {
+    statusEl.innerHTML = `
+      <option value="">全部状态</option>
+      <option value="在用">在用</option>
+      <option value="闲置">闲置</option>
+      <option value="待出">待出</option>
+      <option value="已出">已出</option>
+      <option value="维修中">维修中</option>`;
+    typeEl.innerHTML = `
+      <option value="">全部类型</option>
+      <option value="相机">相机</option>
+      <option value="镜头">镜头</option>
+      <option value="三脚架">三脚架</option>
+      <option value="闪光灯">闪光灯</option>
+      <option value="滤镜">滤镜</option>
+      <option value="扫描仪">扫描仪</option>
+      <option value="其他">其他</option>`;
+  }
+
+  // 重置排序
+  currentSort = { field: 'created_at', dir: 'DESC' };
+
+  loadData();
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+
+loadStats();
+loadData();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,159 @@
+name: gear-management
+version: 1.0.0
+description: 设备管理 — 记录、查询、修改、删除摄影器材
+
+tools:
+  - name: add_gear
+    handler: add_gear
+    description: 添加一条设备记录。当用户说"买了/入了/收了 ×× 相机/镜头/三脚架"时调用。
+    parameters:
+      - name: name
+        type: string
+        required: true
+        description: 设备名称，如"康泰时 T2"、"哈苏 500CM"、"徕卡 50/1.4"
+      - name: gear_type
+        type: string
+        required: true
+        enum: ["相机", "镜头", "三脚架", "闪光灯", "取景器", "测光表", "手柄", "快门线", "滤镜", "近摄接环", "摄影包", "背带", "扫描仪", "其他配件"]
+        description: 设备类型
+      - name: category
+        type: string
+        required: false
+        enum: ["主机", "镜头", "配件"]
+        description: 大类。相机→主机，镜头→镜头，其他→配件（自动推断，可不填）
+      - name: brand
+        type: string
+        required: false
+        description: 品牌，如 Contax、Leica、Nikon、Hasselblad、Fujifilm
+      - name: model
+        type: string
+        required: false
+        description: 型号，如 T2、M6、500CM
+      - name: nickname
+        type: string
+        required: false
+        description: 用户给设备起的爱称，如"小康"、"黑夫人"
+      - name: serial_number
+        type: string
+        required: false
+        description: 序列号
+      - name: camera_type
+        type: string
+        required: false
+        enum: ["可换镜头", "不可换镜头"]
+        description: 相机类型。仅在 gear_type=相机 时使用
+      - name: lens_mount
+        type: string
+        required: false
+        description: 镜头卡口，如"尼康F口"、"徕卡M口"、"索尼E口"、"佳能EF口"、"M42"、"L39"、"PK口"
+      - name: shutter_type
+        type: string
+        required: false
+        description: 快门类型，如"焦平面"、"镜间"、"电子"
+      - name: format_support
+        type: string
+        required: false
+        description: 支持的画幅，如"135"、"120"、"全画幅"、"APS-C"
+      - name: purchase_date
+        type: string
+        required: false
+        description: 购买日期，格式 YYYY-MM-DD
+      - name: price
+        type: number
+        required: false
+        description: 买入价格（元）
+      - name: condition
+        type: string
+        required: false
+        enum: ["全新", "99新", "95新", "9成新", "8成新", "战斗成色"]
+        description: 设备成色
+      - name: status
+        type: string
+        required: false
+        enum: ["在用", "闲置", "待出", "已出", "维修中"]
+        description: 设备状态，默认为"在用"
+      - name: storage_location
+        type: string
+        required: false
+        description: 存放位置
+      - name: meta
+        type: object
+        required: false
+        description: 扩展信息（JSON 对象）。例如：{"accessories":["皮套","遮光罩"], "notes":"快门声好听"}
+
+  - name: query_gear
+    handler: query_gear
+    description: 查询设备列表。支持按类型、品牌、状态过滤。当用户说"我的××有哪些/查一下设备/看看器材"时调用。
+    parameters:
+      - name: filters
+        type: object
+        required: false
+        description: 过滤条件。例如 {"gear_type":"相机", "brand":"Leica", "status":"在用"}
+      - name: order_by
+        type: string
+        required: false
+        enum: ["created_at", "name", "brand", "price", "purchase_date"]
+        description: 排序字段，默认 created_at
+      - name: order_dir
+        type: string
+        required: false
+        enum: ["ASC", "DESC"]
+        description: 排序方向，默认 DESC
+      - name: limit
+        type: integer
+        required: false
+        description: 返回条数上限，默认 50
+
+  - name: update_gear
+    handler: update_gear
+    description: 修改设备记录。当用户说"改成/出掉了/送修了/补充××信息"时调用。
+    parameters:
+      - name: gear_id
+        type: string
+        required: true
+        description: 要修改的设备 ID
+      - name: name
+        type: string
+        required: false
+        description: 新的设备名称
+      - name: gear_type
+        type: string
+        required: false
+        description: 新的设备类型
+      - name: brand
+        type: string
+        required: false
+        description: 新的品牌
+      - name: status
+        type: string
+        required: false
+        description: 新的状态（在用/闲置/待出/已出/维修中）
+      - name: condition
+        type: string
+        required: false
+        description: 新的成色
+      - name: price
+        type: number
+        required: false
+        description: 新的价格
+      - name: storage_location
+        type: string
+        required: false
+        description: 新的存放位置
+      - name: meta
+        type: object
+        required: false
+        description: 要补充的扩展信息。会合并到已有 meta 中。
+
+  - name: delete_gear
+    handler: delete_gear
+    description: 删除设备记录。注意：删除前必须先查询确认。
+    parameters:
+      - name: gear_id
+        type: string
+        required: true
+        description: 要删除的设备 ID
+      - name: confirmed
+        type: boolean
+        required: false
+        description: 用户是否明确确认删除

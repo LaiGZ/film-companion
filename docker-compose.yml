@@ -1,0 +1,40 @@
+services:
+  # === 可选：PostgreSQL（生产环境） ===
+  db:
+    image: postgres:16-alpine
+    profiles:
+      - prod
+    environment:
+      POSTGRES_USER: filmuser
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-filmpass}
+      POSTGRES_DB: film_companion
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U filmuser -d film_companion"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # === 主应用 ===
+  app:
+    build: .
+    ports:
+      - "${PORT:-8080}:8080"
+    env_file:
+      - .env
+    environment:
+      # 默认值（会被 .env 覆写）
+      LLM_PROVIDER: ${LLM_PROVIDER:-deepseek}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-v4-flash}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///data/film_companion.db}
+    volumes:
+      - appdata:/app/data
+    command: python main.py
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  appdata:

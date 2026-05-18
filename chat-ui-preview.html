@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>胶片伴侣 AI — 界面预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f0f1a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+    padding: 20px;
+  }
+  .mockup {
+    width: 1100px;
+    max-width: 100%;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    background: #1a1a2e;
+  }
+  .mockup-header {
+    background: #16213e;
+    border-bottom: 1px solid #2a3a6a;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .mockup-header-left { display: flex; align-items: center; gap: 12px; }
+  .mockup-logo { font-size: 22px; }
+  .mockup-title { color: #eaeaea; font-weight: 600; font-size: 16px; }
+  .mockup-subtitle { color: #8a8a9a; font-size: 11px; margin-top: 1px; }
+  .mockup-nav { display: flex; gap: 6px; }
+  .mockup-nav a {
+    color: #8a8a9a; text-decoration: none;
+    padding: 5px 12px; border-radius: 6px;
+    font-size: 13px; background: #1e2a4a;
+  }
+  .mockup-nav a.active { color: #eaeaea; border-bottom: 2px solid #e94560; background: #1e2a4a; }
+
+  .mockup-body { display: flex; height: 540px; }
+  .mockup-sidebar {
+    width: 240px;
+    background: #131b2e;
+    border-right: 1px solid #2a3a6a;
+    display: flex;
+    flex-direction: column;
+  }
+  .mockup-sidebar-header {
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #2a3a6a;
+    color: #8a8a9a;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .mockup-sidebar-header button {
+    background: #e94560; color: white; border: none;
+    width: 28px; height: 28px; border-radius: 6px;
+    font-size: 16px; cursor: pointer;
+  }
+  .mockup-session-list { flex: 1; overflow: hidden; padding: 6px; }
+  .mockup-session-item {
+    padding: 10px 12px; margin: 2px 0; border-radius: 6px;
+    cursor: pointer; border-left: 3px solid transparent;
+  }
+  .mockup-session-item.active {
+    background: #1a2a4a; border-left-color: #e94560;
+  }
+  .mockup-session-item:not(.active):hover { background: #1f2d50; }
+  .mockup-si-title { color: #eaeaea; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mockup-si-preview { color: #5a5a6a; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .mockup-si-meta { color: #5a5a6a; font-size: 11px; margin-top: 3px; }
+
+  .mockup-chat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #1a1a2e;
+  }
+  .mockup-chat-header {
+    padding: 8px 20px; background: #16213e;
+    border-bottom: 1px solid #2a3a6a; color: #8a8a9a; font-size: 13px;
+  }
+  .mockup-messages {
+    flex: 1; overflow: hidden; padding: 20px;
+    position: relative;
+  }
+  .mockup-msg {
+    display: flex; gap: 10px; margin-bottom: 18px;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .mockup-msg.user { flex-direction: row-reverse; }
+  .mockup-avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .mockup-avatar.user { background: #2a3a6a; }
+  .mockup-avatar.ai { background: #e94560; }
+  .mockup-bubble {
+    max-width: 72%; padding: 10px 14px; border-radius: 14px;
+    line-height: 1.6; font-size: 14px;
+    white-space: pre-wrap; word-wrap: break-word;
+  }
+  .mockup-msg.user .mockup-bubble {
+    background: #2a3a6a; color: #eaeaea;
+    border-bottom-right-radius: 4px;
+  }
+  .mockup-msg.ai .mockup-bubble {
+    background: #16213e; border: 1px solid #2a3a6a;
+    color: #eaeaea; border-bottom-left-radius: 4px;
+  }
+
+  .mockup-table {
+    width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 13px;
+  }
+  .mockup-table th, .mockup-table td {
+    border: 1px solid #2a3a6a; padding: 4px 8px; text-align: left;
+  }
+  .mockup-table th { background: #1e2a4a; font-weight: 600; color: #a0a0b0; }
+  .mockup-table td { color: #c0c0d0; }
+  .tag-ok { color: #4caf50; }
+  .tag-expired { color: #e94560; }
+
+  .mockup-input {
+    padding: 14px 20px; border-top: 1px solid #2a3a6a;
+    background: #16213e;
+  }
+  .mockup-input-inner {
+    display: flex; gap: 10px; align-items: center;
+    background: #1e2a4a; border: 1px solid #2a3a6a;
+    border-radius: 12px; padding: 6px 12px;
+  }
+  .mockup-input-inner input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: #eaeaea; font-size: 14px; padding: 6px 0;
+    font-family: inherit;
+  }
+  .mockup-input-inner input::placeholder { color: #5a5a6a; }
+  .mockup-input-inner button {
+    background: #e94560; color: white; border: none;
+    width: 36px; height: 36px; border-radius: 50%;
+    font-size: 16px; cursor: pointer;
+  }
+
+  .mockup-cursor {
+    display: inline-block; width: 2px; height: 1em;
+    background: #e94560; margin-left: 2px;
+    animation: blink 0.8s step-end infinite;
+    vertical-align: text-bottom;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .mockup-tool-bar {
+    display: flex; align-items: center; gap: 8px;
+    color: #f5a623; font-size: 13px; padding: 4px 0 10px 42px;
+  }
+  .mockup-spinner {
+    width: 14px; height: 14px;
+    border: 2px solid #2a3a6a; border-top-color: #f5a623;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* annotations */
+  .annotations {
+    margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+  }
+  .annot {
+    background: #1e2a4a; border: 1px solid #2a3a6a;
+    padding: 10px 16px; border-radius: 10px; color: #a0a0b0;
+    font-size: 13px; display: flex; align-items: center; gap: 8px;
+  }
+  .annot .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-green { background: #4caf50; }
+  .dot-red { background: #e94560; }
+  .dot-yellow { background: #f5a623; }
+  .dot-blue { background: #22d3ee; }
+
+  .title-row {
+    text-align: center; margin-bottom: 16px; color: #eaeaea;
+  }
+  .title-row h1 { font-size: 20px; margin-bottom: 4px; }
+  .title-row p { color: #8a8a9a; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="mockup">
+  <!-- 头部 -->
+  <div class="mockup-header">
+    <div class="mockup-header-left">
+      <span class="mockup-logo">🎞️</span>
+      <div>
+        <div class="mockup-title">胶片伴侣 AI</div>
+        <div class="mockup-subtitle">对话式胶片管理助手</div>
+      </div>
+    </div>
+    <div class="mockup-nav">
+      <a href="#" class="active">💬 对话</a>
+      <a href="#">📊 数据</a>
+    </div>
+  </div>
+
+  <div class="mockup-body">
+    <!-- 侧栏 -->
+    <div class="mockup-sidebar">
+      <div class="mockup-sidebar-header">
+        <span>📋 会话列表</span>
+        <button>＋</button>
+      </div>
+      <div class="mockup-session-list">
+        <div class="mockup-session-item active">
+          <div class="mockup-si-title">查一下我有什么胶卷</div>
+          <div class="mockup-si-preview">查询结果回来了～</div>
+          <div class="mockup-si-meta">刚刚 · 11 条消息</div>
+        </div>
+        <div class="mockup-session-item">
+          <div class="mockup-si-title">买了3卷富士 Provia 100F</div>
+          <div class="mockup-si-preview">好的，已记录！</div>
+          <div class="mockup-si-meta">2 小时前 · 5 条消息</div>
+        </div>
+        <div class="mockup-session-item">
+          <div class="mockup-si-title">新会话</div>
+          <div class="mockup-si-preview"></div>
+          <div class="mockup-si-meta">3 小时前</div>
+        </div>
+        <div class="mockup-session-item">
+          <div class="mockup-si-title">我有哪些相机？</div>
+          <div class="mockup-si-preview">你目前有 2 台相机</div>
+          <div class="mockup-si-meta">1 天前 · 8 条消息</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 聊天区域 -->
+    <div class="mockup-chat">
+      <div class="mockup-chat-header">
+        💬 查一下我有什么胶卷
+      </div>
+
+      <div class="mockup-messages">
+        <!-- 用户消息 -->
+        <div class="mockup-msg user" style="animation-delay: 0s">
+          <div class="mockup-avatar user">👤</div>
+          <div class="mockup-bubble">查一下我有什么胶卷</div>
+        </div>
+
+        <!-- tool 执行指示 -->
+        <div class="mockup-tool-bar" style="animation-delay: 0.1s">
+          <div class="mockup-spinner"></div>
+          <span>正在执行: query_film</span>
+        </div>
+
+        <!-- AI 回复（流式） -->
+        <div class="mockup-msg ai" style="animation-delay: 0.3s">
+          <div class="mockup-avatar ai">🤖</div>
+          <div class="mockup-bubble">
+            📸 你目前有 <b>2 款胶卷</b> 库存，情况如下：
+            <table class="mockup-table">
+              <tr><th>型号</th><th>类型</th><th>ISO</th><th>格式</th><th>数量</th><th>单价</th><th>状态</th></tr>
+              <tr><td>柯达金 200</td><td>彩色负片</td><td>200</td><td><b>135</b></td><td>3 卷</td><td>¥100</td><td class="tag-ok">✅ 未使用</td></tr>
+              <tr><td>柯达金 200</td><td>彩色负片</td><td>200</td><td><b>120</b></td><td>3 卷</td><td>¥200</td><td class="tag-ok">✅ 未使用</td></tr>
+            </table>
+            一共 <b>6 卷</b>，全是未使用的好卷！<span class="mockup-cursor"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 输入区域 -->
+      <div class="mockup-input">
+        <div class="mockup-input-inner">
+          <input type="text" placeholder="说句话，比如「买了3卷 Provia 100F」..." value="帮我记一下刚入的">
+          <button>▶</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 功能标注 -->
+<div class="title-row" style="margin-top: 20px;">
+  <p>↓ 当前实现的功能标注 ↓</p>
+</div>
+<div class="annotations">
+  <div class="annot"><span class="dot dot-green"></span> SSE 流式 — 字会一个一个蹦出来</div>
+  <div class="annot"><span class="dot dot-green"></span> 侧栏会话列表 — 点击切换历史</div>
+  <div class="annot"><span class="dot dot-green"></span> 自动加载最后一次会话</div>
+  <div class="annot"><span class="dot dot-green"></span> 工具调用指示 — 后台查询有动画提示</div>
+  <div class="annot"><span class="dot dot-green"></span> 表格式展示 — 查询结果智能排版</div>
+  <div class="annot"><span class="dot dot-green"></span> 新建会话 — ＋按钮一键新建</div>
+</div>
+</body>
+</html>
