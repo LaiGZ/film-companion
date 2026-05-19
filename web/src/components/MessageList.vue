@@ -229,12 +229,22 @@ watch(
   30% { transform: translateY(-5px); }
 }
 
-/* === Markdown 渲染样式 === */
+@media (max-width: 768px) {
+  .message-inner { padding: 0 12px; }
+  .msg-bubble { max-width: 88%; font-size: 14px; }
+  .message.user .msg-bubble { max-width: 82%; }
+  .welcome { padding: 40px 0 24px; }
+}
+</style>
+
+<!-- 非 scoped：Markdown 渲染样式（v-html 内容无 scoped attribute，必须全局匹配） -->
+<style>
 .markdown-body table {
   border-collapse: collapse;
   width: 100%;
   margin: 8px 0;
   font-size: 14px;
+  border: 1px solid var(--border);
 }
 .markdown-body th,
 .markdown-body td {
@@ -307,12 +317,5 @@ watch(
 .markdown-body img {
   max-width: 100%;
   border-radius: 6px;
-}
-
-@media (max-width: 768px) {
-  .message-inner { padding: 0 12px; }
-  .msg-bubble { max-width: 88%; font-size: 14px; }
-  .message.user .msg-bubble { max-width: 82%; }
-  .welcome { padding: 40px 0 24px; }
 }
 </style>
