@@ -45,3 +45,31 @@
 - SSH 用户名是 `root`，项目路径 `/home/aideploy/film-companion`
 - 容器名 `film-companion-app-1`（docker compose 命名）
 - git pull 前需 `git config --global --add safe.directory /home/aideploy/film-companion`
+
+
+## 2026-05-19 11:22 | `2be0554`
+
+| 项目 | 内容 |
+|------|------|
+| 版本 | `2be0554` |
+| 日期 | 2026-05-19 11:22 |
+| 类型 | feat |
+| 部署方式 | 方案 B（完整构建） |
+| 部署人 | laigz |
+
+**变更内容**
+
+- feat: Vue 3 前端重构 — 13 个组件，全量替换原生 HTML/CSS/JS
+- 5 套可切换主题（极简白/深空灰/暖阳米/暗房红/墨绿）
+- 交互参考 ChatGPT/DeepSeek 风格，全屏聊天 + 弹出侧栏
+- Vite 构建，输出到 web/dist/，后端自动切换静态目录
+
+**验证结果**
+
+| 检查项 | 结果 |
+|--------|------|
+| Vue 首页 (`/`) | ✅ 200 (Vue SPA) |
+| 注册 POST /api/auth/register | ✅ ok |
+| 登录 POST /api/auth/login | ✅ token returned |
+| 认证 GET /api/film | ✅ 200 (user-scoped) |
+| 日志 | ✅ 无错误 |
