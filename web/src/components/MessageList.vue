@@ -280,25 +280,25 @@ watch(
   border-radius: 0;
 }
 .markdown-body p {
-  margin: 6px 0;
-  line-height: 1.7;
+  margin: 2px 0;
+  line-height: 1.5;
 }
 .markdown-body ul,
 .markdown-body ol {
-  margin: 6px 0;
-  padding-left: 20px;
+  margin: 3px 0;
+  padding-left: 18px;
 }
 .markdown-body li {
-  margin: 3px 0;
+  margin: 1px 0;
 }
 .markdown-body h1, .markdown-body h2, .markdown-body h3,
 .markdown-body h4, .markdown-body h5, .markdown-body h6 {
-  margin: 12px 0 6px;
-  line-height: 1.4;
+  margin: 8px 0 3px;
+  line-height: 1.3;
 }
-.markdown-body h1 { font-size: 20px; }
-.markdown-body h2 { font-size: 18px; }
-.markdown-body h3 { font-size: 16px; }
+.markdown-body h1 { font-size: 18px; }
+.markdown-body h2 { font-size: 16px; }
+.markdown-body h3 { font-size: 15px; }
 .markdown-body blockquote {
   border-left: 3px solid var(--primary);
   padding-left: 12px;

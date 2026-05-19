@@ -17,7 +17,7 @@
             :key="t.id"
             class="theme-option"
             :class="{ active: theme.themeId.value === t.id }"
-            @click="theme.setTheme(t.id)"
+            @click="theme.setTheme(t.id); showThemePanel = false"
           >
             {{ t.icon }} {{ t.name }}
           </div>
