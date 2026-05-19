@@ -22,9 +22,7 @@
         :class="msg.role"
       >
         <div v-if="msg.role === 'assistant'" class="msg-avatar ai">🤖</div>
-        <div class="msg-bubble" :class="msg.role">
-          {{ msg.content }}
-        </div>
+        <div class="msg-bubble markdown-body" :class="msg.role" v-html="renderMarkdown(msg.content)"></div>
         <div v-if="msg.role === 'user'" class="msg-avatar user">👤</div>
       </div>
 
@@ -37,9 +35,7 @@
       <!-- 流式内容 -->
       <div v-if="store.isStreaming" class="message assistant">
         <div class="msg-avatar ai">🤖</div>
-        <div class="msg-bubble assistant streaming">
-          {{ store.streamContent }}<span class="cursor-blink"></span>
-        </div>
+        <div class="msg-bubble assistant streaming markdown-body" v-html="renderMarkdown(store.streamContent)"></div><span class="cursor-blink"></span>
       </div>
 
       <!-- 打字指示 -->
@@ -54,13 +50,24 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, computed, nextTick } from 'vue'
 import { useChatStore } from '@/stores/chatStore'
+import { marked } from 'marked'
 
-defineEmits(['suggest'])
+// 配置 marked
+marked.setOptions({
+  breaks: true,
+  gfm: true
+})
 
+const emit = defineEmits(['suggest'])
 const store = useChatStore()
 const scrollRef = ref(null)
+
+function renderMarkdown(text) {
+  if (!text) return ''
+  return marked.parse(text)
+}
 
 // 自动滚动到底
 watch(
@@ -220,6 +227,86 @@ watch(
 @keyframes bounce {
   0%, 60%, 100% { transform: translateY(0); }
   30% { transform: translateY(-5px); }
+}
+
+/* === Markdown 渲染样式 === */
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 14px;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+.markdown-body th {
+  background: var(--surface2);
+  font-weight: 600;
+}
+.markdown-body tr:nth-child(even) {
+  background: var(--surface-hover);
+}
+.markdown-body code {
+  background: var(--surface2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+.markdown-body pre {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+.markdown-body p {
+  margin: 6px 0;
+  line-height: 1.7;
+}
+.markdown-body ul,
+.markdown-body ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+.markdown-body li {
+  margin: 3px 0;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3,
+.markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  margin: 12px 0 6px;
+  line-height: 1.4;
+}
+.markdown-body h1 { font-size: 20px; }
+.markdown-body h2 { font-size: 18px; }
+.markdown-body h3 { font-size: 16px; }
+.markdown-body blockquote {
+  border-left: 3px solid var(--primary);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--text2);
+}
+.markdown-body a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+.markdown-body img {
+  max-width: 100%;
+  border-radius: 6px;
 }
 
 @media (max-width: 768px) {
