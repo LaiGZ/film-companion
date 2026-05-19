@@ -73,3 +73,40 @@
 | 登录 POST /api/auth/login | ✅ token returned |
 | 认证 GET /api/film | ✅ 200 (user-scoped) |
 | 日志 | ✅ 无错误 |
+
+## 2026-05-17 19:37 | `ccd4320`
+
+| 项目 | 内容 |
+|------|------|
+| 版本 | `ccd4320` |
+| 日期 | 2026-05-17 19:37 |
+| 类型 | fix |
+| 部署方式 | 方案 B（scp dist + docker cp） |
+| 部署人 | laigz |
+
+**变更内容**
+
+- fix: 添加 Markdown 渲染支持 — 安装 `marked` 包，`MessageList.vue` 中集成 `marked.parse()`
+- 气泡消息和流式内容均通过 marked 渲染 Markdown（表格、代码块、列表等）
+- 添加完整的 Markdown 样式（表格斑马纹、代码块、引用块、标题层级等）
+- 流式光标移到 `v-html` 外部解决编译冲突
+
+**涉及文件**
+
+| 文件 | 改动 |
+|------|------|
+| `web/src/components/MessageList.vue` | 新增 marked 导入 + renderMarkdown + markdown-body CSS |
+| `web/package.json` | 新增 marked 依赖 |
+
+**验证结果**
+
+| 检查项 | 结果 |
+|--------|------|
+| 构建 | ✅ 1.58s (64 modules) |
+| 首页 | ✅ 200 |
+| 注册/登录 | ✅ 200 |
+| 日志 | ✅ 无错误 |
+
+**注意**
+- 无
+
