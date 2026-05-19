@@ -76,7 +76,14 @@ app = FastAPI(
 
 # 挂载静态文件
 web_dir = os.path.join(os.path.dirname(__file__))
-app.mount("/static", StaticFiles(directory=web_dir), name="static")
+dist_dir = os.path.join(os.path.dirname(__file__), "dist")
+# 优先使用 dist 目录（Vue 构建产物）
+static_dir = dist_dir if os.path.exists(dist_dir) else web_dir
+if os.path.exists(dist_dir):
+    print(f"📦 前端: Vite 构建产物 (dist)")
+else:
+    print(f"📦 前端: 开发模式 (静态文件)")
+app.mount("/assets", StaticFiles(directory=os.path.join(static_dir, "assets")), name="assets")
 
 # 注册认证路由
 from web.auth import router as auth_router, get_current_user
@@ -90,21 +97,23 @@ app.include_router(auth_router)
 @app.get("/", response_class=HTMLResponse)
 async def chat_page():
     """聊天页面"""
-    html_path = os.path.join(web_dir, "chat.html")
+    html_path = os.path.join(static_dir, "index.html")
     if os.path.exists(html_path):
         with open(html_path, encoding="utf-8") as f:
+            return f.read()
+    # 降级到旧版 chat.html
+    legacy = os.path.join(web_dir, "chat.html")
+    if os.path.exists(legacy):
+        with open(legacy, encoding="utf-8") as f:
             return f.read()
     return HTMLResponse("<h1>页面未找到</h1>", status_code=404)
 
 
 @app.get("/data", response_class=HTMLResponse)
 async def data_page():
-    """数据查看页面"""
-    html_path = os.path.join(web_dir, "data.html")
-    if os.path.exists(html_path):
-        with open(html_path, encoding="utf-8") as f:
-            return f.read()
-    return HTMLResponse("<h1>页面未找到</h1>", status_code=404)
+    """数据查看页面 — Vue Router hash 模式，重定向到 /"""
+    # hash 模式下 /data 由前端路由处理
+    return await chat_page()
 
 
 # ============================================================
