@@ -22,8 +22,8 @@
         :class="msg.role"
       >
         <div v-if="msg.role === 'assistant'" class="msg-avatar ai">🤖</div>
-        <div class="msg-bubble markdown-body" :class="msg.role" v-html="renderMarkdown(msg.content)"></div>
         <div v-if="msg.role === 'user'" class="msg-avatar user">👤</div>
+        <div class="msg-bubble markdown-body" :class="msg.role" v-html="renderMarkdown(msg.content)"></div>
       </div>
 
       <!-- 工具调用指示 -->
