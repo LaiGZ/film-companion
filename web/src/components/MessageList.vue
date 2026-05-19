@@ -21,8 +21,6 @@
         class="message"
         :class="msg.role"
       >
-        <div v-if="msg.role === 'assistant'" class="msg-avatar ai">🤖</div>
-        <div v-if="msg.role === 'user'" class="msg-avatar user">👤</div>
         <div class="msg-bubble markdown-body" :class="msg.role" v-html="renderMarkdown(msg.content)"></div>
       </div>
 
@@ -34,7 +32,6 @@
 
       <!-- 流式内容 -->
       <div v-if="store.isStreaming" class="message assistant">
-        <div class="msg-avatar ai">🤖</div>
         <div class="msg-bubble assistant streaming markdown-body" v-html="renderMarkdown(store.streamContent)"></div><span class="cursor-blink"></span>
       </div>
 
@@ -123,7 +120,6 @@ watch(
 /* 消息 */
 .message {
   display: flex;
-  gap: 10px;
   margin-bottom: 18px;
   animation: fadeIn 0.25s ease;
 }
@@ -132,20 +128,7 @@ watch(
   to { opacity: 1; transform: translateY(0); }
 }
 
-.message.user { flex-direction: row-reverse; }
-
-.msg-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  flex-shrink: 0;
-}
-.msg-avatar.user { background: var(--user-bubble); }
-.msg-avatar.ai { background: var(--primary); color: white; }
+.message.user { justify-content: flex-end; }
 
 .msg-bubble {
   max-width: 72%;

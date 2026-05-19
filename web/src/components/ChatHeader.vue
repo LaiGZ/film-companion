@@ -6,8 +6,19 @@
       <span class="header-title">{{ title }}</span>
     </div>
     <div class="header-right">
-      <span v-if="store.isLoggedIn" class="user-name">{{ store.username }}</span>
-      <button class="icon-btn" @click="showThemePanel = !showThemePanel" title="主题">🎨</button>
+      <button v-if="store.isLoggedIn" class="icon-btn" @click="showUserPanel = !showUserPanel; showThemePanel = false" title="用户">
+        <span class="user-icon">👤</span>
+      </button>
+      <!-- 用户面板 -->
+      <Transition name="pop">
+        <div v-if="showUserPanel" class="dropdown-panel">
+          <p class="panel-title">{{ store.username }}</p>
+          <router-link to="/data" class="panel-item" @click="showUserPanel = false">📊 数据管理</router-link>
+          <div class="panel-divider"></div>
+          <button class="panel-item panel-logout" @click="handleLogout">🚪 退出登录</button>
+        </div>
+      </Transition>
+      <button class="icon-btn" @click="showThemePanel = !showThemePanel; showUserPanel = false" title="主题">🎨</button>
       <!-- 主题面板 -->
       <Transition name="pop">
         <div v-if="showThemePanel" class="theme-panel">
@@ -28,8 +39,6 @@
           </label>
         </div>
       </Transition>
-      <router-link to="/data" class="icon-btn" title="数据">📊</router-link>
-      <button v-if="store.isLoggedIn" class="icon-btn logout-btn" @click="handleLogout" title="退出">🚪</button>
     </div>
   </header>
 </template>
@@ -48,6 +57,7 @@ const chatStore = useChatStore()
 const { logout } = useAuth()
 const theme = useTheme()
 const showThemePanel = ref(false)
+const showUserPanel = ref(false)
 
 const title = ref('胶片伴侣 AI')
 
@@ -61,6 +71,7 @@ watch(() => chatStore.currentSession, (s) => {
 
 async function handleLogout() {
   showThemePanel.value = false
+  showUserPanel.value = false
   await logout()
 }
 </script>
@@ -118,12 +129,6 @@ async function handleLogout() {
   text-overflow: ellipsis;
 }
 
-.user-name {
-  font-size: 13px;
-  color: var(--text2);
-  margin-right: 4px;
-}
-
 .icon-btn {
   background: none;
   border: 1px solid transparent;
@@ -141,9 +146,56 @@ async function handleLogout() {
 }
 .icon-btn:hover { background: var(--surface2); color: var(--text); }
 
-.logout-btn:hover { color: var(--danger); }
+/* 用户／主题通用下拉面板 */
+.dropdown-panel,
+.theme-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  min-width: 150px;
+  box-shadow: 0 8px 30px var(--shadow);
+  z-index: 100;
+}
+.panel-title {
+  font-size: 12px;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px 6px;
+  font-weight: 600;
+}
+.panel-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--text);
+  text-decoration: none;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  box-sizing: border-box;
+}
+.panel-item:hover { background: var(--surface2); }
+.panel-logout { color: var(--danger); }
+.panel-logout:hover { background: var(--danger-bg, rgba(255,59,48,0.08)); }
+.panel-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
 
-/* 主题面板 */
+/* 主题面板（保持独立样式） */
 .theme-panel {
   position: absolute;
   top: 100%;
@@ -206,6 +258,5 @@ async function handleLogout() {
 
 @media (max-width: 768px) {
   .chat-header { padding: 8px 12px; }
-  .user-name { display: none; }
 }
 </style>
