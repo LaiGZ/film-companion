@@ -99,6 +99,12 @@ async def get_context(session_id: str) -> list:
         role = msg["role"]
         content = msg["content"]
         if role in ("user", "assistant"):
+            # 尝试解析 JSON — 如果存储的是多模态格式（JSON 数组），还原为数组
+            if isinstance(content, str) and content.startswith("["):
+                try:
+                    content = json.loads(content)
+                except (json.JSONDecodeError, TypeError):
+                    pass
             context.append({"role": role, "content": content})
         elif role == "tool_call":
             # tool_call 消息转为 LLM 的 assistant + function_call 消息

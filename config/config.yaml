@@ -1,8 +1,20 @@
 # 胶片伴侣 AI - 配置文件
 
+# ↓↓↓ 旧的 DeepSeek 配置（注释保留备用） ↓↓↓
+# llm:
+#   provider: deepseek
+#   model: deepseek-v4-flash
+#   temperature: 0.3
+#   max_tokens: 4000
+
+# ↑↑↑ 旧的 DeepSeek 配置 ↑↑↑
+
+# 火山引擎 Doubao 配置
 llm:
-  provider: deepseek          # openai / claude / deepseek
-  model: deepseek-v4-flash    # gpt-4o / claude-sonnet-4-20250514 / deepseek-v4-flash
+  provider: doubao
+  model: doubao-seed-2-0-lite-260428
+  base_url: "https://ark.cn-beijing.volces.com/api/v3"
+  api_key: "25304a4d-ae74-4c0c-ba8f-ab8220a49229"
   temperature: 0.3
   max_tokens: 4000
 

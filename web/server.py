@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
+    images: list[str] = []  # base64 data URI 列表，如 ["data:image/jpeg;base64,..."]
 
 
 class ChatResponse(BaseModel):
@@ -249,7 +250,7 @@ async def delete_session(
 # SSE 流式聊天 — 核心接口
 # ============================================================
 
-async def _chat_event_stream(session_id: str, user_input: str, user_id: str):
+async def _chat_event_stream(session_id: str, user_input: str, user_id: str, images: list[str] = None):
     """SSE 事件生成器 — 处理多轮对话（含工具调用）"""
     from memory.context import record_user_message, record_assistant_message, get_context
     from memory.context import record_tool_call, record_tool_result
@@ -258,11 +259,22 @@ async def _chat_event_stream(session_id: str, user_input: str, user_id: str):
 
     system_prompt = await _build_system_prompt(user_id)
     context = await get_context(session_id)
-    current_messages = context + [{"role": "user", "content": user_input}]
 
-    # 记录用户消息
+    # 构建用户消息内容（支持多模态：文本 + 图片）
+    user_content = user_input
+    if images:
+        parts = [{"type": "text", "text": user_input}]
+        for img in images:
+            parts.append({"type": "image_url", "image_url": {"url": img}})
+        user_content = parts
+
+    current_messages = context + [{"role": "user", "content": user_content}]
+
+    # 记录用户消息（存储为 JSON 字符串便于还原）
+    import json
+    stored_content = json.dumps(user_content, ensure_ascii=False) if isinstance(user_content, list) else user_content
     state.turn_index += 1
-    msg_id = await record_user_message(session_id, user_input, state.turn_index)
+    msg_id = await record_user_message(session_id, stored_content, state.turn_index)
     state.user_count += 1
 
     # 自动生成会话标题（第一条用户消息）
@@ -420,7 +432,7 @@ async def chat_stream(
         raise HTTPException(status_code=400, detail="消息不能为空")
 
     return StreamingResponse(
-        _chat_event_stream(session_id, user_input, user_id),
+        _chat_event_stream(session_id, user_input, user_id, images=request.images or None),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

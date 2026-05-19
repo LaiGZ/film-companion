@@ -39,6 +39,8 @@ def load_config() -> LLMConfig:
         cfg.model = llm_cfg.get("model", "gpt-4o")
         cfg.temperature = llm_cfg.get("temperature", 0.3)
         cfg.max_tokens = llm_cfg.get("max_tokens", 2000)
+        cfg.base_url = llm_cfg.get("base_url", "")
+        cfg.api_key = llm_cfg.get("api_key", "")
 
     # 环境变量覆盖
     cfg.provider = os.getenv("LLM_PROVIDER", cfg.provider)
@@ -497,6 +499,124 @@ class DeepSeekProvider(LLMProvider):
 
 
 # ============================================================
+# Doubao（火山引擎）实现 — OpenAI 兼容接口，支持多模态
+# ============================================================
+
+class DoubaoProvider(LLMProvider):
+    """火山引擎 Doubao API — 直接 HTTP 调用，支持多模态"""
+
+    def __init__(self, config: LLMConfig):
+        super().__init__(config)
+        import httpx
+        self._http = httpx.AsyncClient(timeout=120)
+        self.base_url = (config.base_url or "https://ark.cn-beijing.volces.com/api/v3").rstrip("/")
+        self.api_key = config.api_key
+
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def _build_body(self, messages: list, tools: list = None,
+                    system_prompt: str = None, stream: bool = False) -> dict:
+        msgs = self._format_messages(messages, system_prompt)
+        cleaned = []
+        for m in msgs:
+            m = dict(m)
+            if m.get("role") == "assistant" and m.get("content") == "":
+                if m.get("tool_calls"):
+                    m["content"] = None
+            cleaned.append(m)
+        body = {
+            "model": self.config.model,
+            "messages": cleaned,
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+        }
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = "auto"
+        if stream:
+            body["stream"] = True
+        return body
+
+    def _parse_response(self, resp) -> LLMResponse:
+        if resp.status_code != 200:
+            raise Exception(f"Doubao API error {resp.status_code}: {resp.json()}")
+        data = resp.json()
+        choice = data["choices"][0]
+        msg = choice["message"]
+        usage = data.get("usage", {})
+        tool_calls = []
+        for tc in (msg.get("tool_calls") or []):
+            tool_calls.append({
+                "id": tc["id"], "type": "function",
+                "function": {"name": tc["function"]["name"], "arguments": tc["function"]["arguments"]}
+            })
+        return LLMResponse(
+            content=msg.get("content") or "", tool_calls=tool_calls,
+            usage={"prompt_tokens": usage.get("prompt_tokens", 0), "completion_tokens": usage.get("completion_tokens", 0)},
+            finish_reason=choice.get("finish_reason", ""),
+        )
+
+    async def chat(self, messages: list, tools: list = None,
+                   system_prompt: str = None) -> LLMResponse:
+        body = self._build_body(messages, tools, system_prompt)
+        resp = await self._http.post(
+            f"{self.base_url}/chat/completions", headers=self._headers(), json=body)
+        return self._parse_response(resp)
+
+    async def chat_stream(self, messages: list, tools: list = None,
+                          system_prompt: str = None):
+        body = self._build_body(messages, tools, system_prompt, stream=True)
+        accumulated_text = ""
+        accumulated_tool_calls: dict[int, dict] = {}
+        async with self._http.stream(
+            "POST", f"{self.base_url}/chat/completions",
+            headers=self._headers(), json=body,
+        ) as resp:
+            if resp.status_code != 200:
+                err_body = await resp.aread()
+                yield {"type": "error", "content": f"API Error {resp.status_code}: {err_body.decode()[:200]}"}
+                return
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                payload = line[6:].strip()
+                if payload == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                choices = chunk.get("choices", [])
+                if not choices:
+                    continue
+                delta = choices[0].get("delta", {})
+                content = delta.get("content")
+                if content:
+                    accumulated_text += content
+                    yield {"type": "token", "content": content}
+                tc_delta = delta.get("tool_calls")
+                if tc_delta:
+                    for tc in tc_delta:
+                        idx = tc.get("index", 0)
+                        if idx not in accumulated_tool_calls:
+                            accumulated_tool_calls[idx] = {
+                                "id": tc.get("id", f"call_{idx}"), "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            }
+                        fn = tc.get("function", {})
+                        if fn.get("name"):
+                            accumulated_tool_calls[idx]["function"]["name"] += fn["name"]
+                        if fn.get("arguments"):
+                            accumulated_tool_calls[idx]["function"]["arguments"] += fn["arguments"]
+        tool_calls = [v for _, v in sorted(accumulated_tool_calls.items())] if accumulated_tool_calls else []
+        yield {"type": "done", "content": accumulated_text, "tool_calls": tool_calls}
+
+
+# ============================================================
 # 工厂方法
 # ============================================================
 
@@ -512,6 +632,7 @@ def get_provider(config: LLMConfig = None) -> LLMProvider:
             "openai": OpenAIProvider,
             "claude": ClaudeProvider,
             "deepseek": DeepSeekProvider,
+            "doubao": DoubaoProvider,
         }
         cls = providers.get(cfg.provider)
         if cls is None:

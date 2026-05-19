@@ -7,8 +7,8 @@ export function useChat() {
   const store = useChatStore()
   const { createSession, loadSessions, switchSession } = useSessions()
 
-  async function sendMessage(text) {
-    if (!text || store.isLoading) return
+  async function sendMessage(text, images = []) {
+    if ((!text || store.isLoading) && images.length === 0) return
 
     // 确保有会话
     if (!store.currentSessionId) {
@@ -18,8 +18,14 @@ export function useChat() {
 
     const sessionId = store.currentSessionId
 
+    // 构建显示用的内容（文本 + 图片缩略图）
+    let displayContent = text || ''
+    if (images.length > 0) {
+      displayContent = { text: text || '', images }
+    }
+
     // 添加用户消息到本地
-    store.messages.push({ role: 'user', content: text })
+    store.messages.push({ role: 'user', content: displayContent })
     store.isLoading = true
     store.isStreaming = true
     store.streamContent = ''
@@ -29,7 +35,7 @@ export function useChat() {
       const response = await authFetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, session_id: sessionId }),
+        body: JSON.stringify({ message: text, session_id: sessionId, images }),
       })
 
       if (!response.ok) {
@@ -68,7 +74,6 @@ export function useChat() {
               store.toolNames = event.tools || []
               break
             case 'tool_result':
-              // 工具完成
               break
             case 'done':
               store.messages.push({ role: 'assistant', content: fullContent })

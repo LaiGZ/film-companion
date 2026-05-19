@@ -21,7 +21,7 @@
         class="message"
         :class="msg.role"
       >
-        <div class="msg-bubble markdown-body" :class="msg.role" v-html="renderMarkdown(msg.content)"></div>
+        <div class="msg-bubble markdown-body" :class="msg.role" v-html="renderMessageContent(msg.content)"></div>
       </div>
 
       <!-- 工具调用指示 -->
@@ -32,7 +32,7 @@
 
       <!-- 流式内容 -->
       <div v-if="store.isStreaming" class="message assistant">
-        <div class="msg-bubble assistant streaming markdown-body" v-html="renderMarkdown(store.streamContent)"></div><span class="cursor-blink"></span>
+        <div class="msg-bubble assistant streaming markdown-body" v-html="renderMessageContent(store.streamContent)"></div><span class="cursor-blink"></span>
       </div>
 
       <!-- 打字指示 -->
@@ -61,9 +61,20 @@ const emit = defineEmits(['suggest'])
 const store = useChatStore()
 const scrollRef = ref(null)
 
-function renderMarkdown(text) {
-  if (!text) return ''
-  return marked.parse(text)
+function renderMessageContent(content) {
+  if (!content) return ''
+
+  // 多模态格式：{ text: "...", images: ["data:..."] }
+  if (typeof content === 'object' && content.images) {
+    let html = content.text ? marked.parse(content.text) : ''
+    for (const img of content.images) {
+      html += `<div class="msg-image"><img src="${img}" alt="uploaded image" /></div>`
+    }
+    return html
+  }
+
+  // 纯文本
+  return marked.parse(content)
 }
 
 // 自动滚动到底
@@ -300,5 +311,15 @@ watch(
 .markdown-body img {
   max-width: 100%;
   border-radius: 6px;
+}
+.markdown-body .msg-image {
+  margin: 6px 0;
+}
+.markdown-body .msg-image img {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: var(--surface2);
 }
 </style>
