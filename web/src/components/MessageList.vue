@@ -136,8 +136,8 @@ watch(
   border-radius: var(--radius-lg);
   line-height: 1.6;
   font-size: 15px;
-  white-space: pre-wrap;
   word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .msg-bubble.user {

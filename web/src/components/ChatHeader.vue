@@ -5,7 +5,7 @@
       <span class="logo">🎞️</span>
       <span class="header-title">{{ title }}</span>
     </div>
-    <div class="header-right">
+    <div class="header-right" ref="headerActions">
       <button v-if="store.isLoggedIn" class="icon-btn" @click="showUserPanel = !showUserPanel; showThemePanel = false" title="用户">
         <span class="user-icon">👤</span>
       </button>
@@ -44,7 +44,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
 import { useAuth } from '@/composables/useAuth'
 import { useTheme } from '@/composables/useTheme'
@@ -61,8 +61,20 @@ const showUserPanel = ref(false)
 
 const title = ref('胶片伴侣 AI')
 
+const headerActions = ref(null)
+
+function onDocumentClick(e) {
+  if (!showThemePanel.value && !showUserPanel.value) return
+  if (headerActions.value && !headerActions.value.contains(e.target)) {
+    showThemePanel.value = false
+    showUserPanel.value = false
+  }
+}
+
+onMounted(() => document.addEventListener('click', onDocumentClick))
+onUnmounted(() => document.removeEventListener('click', onDocumentClick))
+
 // 监听会话标题变化
-import { watch } from 'vue'
 watch(() => chatStore.currentSession, (s) => {
   title.value = s?.title || s?.last_preview
     ? (s.title || s.last_preview).slice(0, 28) + ((s.title || s.last_preview).length > 28 ? '...' : '')
