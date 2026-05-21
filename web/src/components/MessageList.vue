@@ -35,12 +35,10 @@
         <div class="msg-bubble assistant streaming markdown-body" v-html="renderMessageContent(store.streamContent)"></div><span class="cursor-blink"></span>
       </div>
 
-      <!-- 打字指示 -->
-      <div v-if="store.isLoading && !store.isStreaming && store.toolNames.length === 0" class="typing-hint">
-        <div class="typing-dots">
-          <span></span><span></span><span></span>
-        </div>
-        <span>胶片伴侣正在思考...</span>
+      <!-- 加载指示：转圈 -->
+      <div v-if="store.isLoading && !store.isStreaming && store.toolNames.length === 0" class="loading-indicator">
+        <div class="loading-spinner"></div>
+        <span>思考中...</span>
       </div>
     </div>
   </div>
@@ -199,28 +197,23 @@ watch(
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* 打字指示 */
-.typing-hint {
+/* 加载指示：转圈 */
+.loading-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding: 14px 0 10px 40px;
   color: var(--text2);
   font-size: 14px;
-  margin-bottom: 18px;
-  padding-left: 40px;
+  animation: fadeIn 0.2s ease;
 }
-.typing-dots { display: flex; gap: 4px; }
-.typing-dots span {
-  width: 7px; height: 7px;
-  background: var(--text3);
+.loading-indicator .loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--primary);
   border-radius: 50%;
-  animation: bounce 1.4s infinite;
-}
-.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes bounce {
-  0%, 60%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-5px); }
+  animation: spin 0.7s linear infinite;
 }
 
 @media (max-width: 768px) {

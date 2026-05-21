@@ -1,19 +1,23 @@
 """
-胶卷管理 — 工具函数实现（异步）
+胶卷管理 — 基于 entity_store 的灵活版本
+
+核心变化：
+  - 不再定义固定字段参数，AI 自由填 data 字典
+  - 所有 CRUD 委托给 entity_store
+  - 保留审计日志（基于 entity_store）
 """
 
-import json
 import time
-from datetime import datetime
 
-from db.schema import (
-    add_film as db_add_film,
-    query_film as db_query_film,
-    update_film as db_update_film,
-    delete_film as db_delete_film,
-    create_entity_link,
+from db.entity_store import (
+    save_entity,
+    query_entities,
+    get_entity,
+    delete_entity,
+    search_entities,
 )
 from db.audit import record_audit
+from db.schema import create_entity_link
 
 
 # ============================================================
@@ -21,13 +25,13 @@ from db.audit import record_audit
 # ============================================================
 
 _current_context = {
-    "user_id": "default",
+    "user_id": "web_user",
     "session_id": None,
     "message_id": None,
 }
 
 
-def set_context(user_id: str = "default", session_id: str = None, message_id: str = None):
+def set_context(user_id: str = "web_user", session_id: str = None, message_id: str = None):
     """设置当前上下文"""
     _current_context["user_id"] = user_id
     _current_context["session_id"] = session_id
@@ -38,93 +42,82 @@ def set_context(user_id: str = "default", session_id: str = None, message_id: st
 # 工具函数（全部 async）
 # ============================================================
 
-async def add_film(name: str, quantity: int = 1, iso: int = None,
-                   film_type: str = None, format: str = "135",
-                   frames: int = None, sheet_count: int = None,
-                   purchase_date: str = None, expiry_date: str = None,
-                   price: float = None, storage_location: str = None,
-                   status: str = "未使用", meta: dict = None) -> dict:
-    """添加胶卷记录"""
+
+async def film_add(name: str, data: dict = None) -> dict:
+    """
+    添加胶卷记录。
+
+    AI 可根据对话内容自由决定 data 中的字段。
+    常见字段参考（非强制）：
+      type:         '彩色负片' / '反转片' / '黑白负片' / '电影卷'
+      brand:        'Kodak' / 'Fuji' / 'Ilford' / ...
+      iso:          100 / 200 / 400 / 800 / 1600 / 3200
+      format:       '135' / '120' / '4×5' / '8×10' / '半格' / '110'
+      frames:       36（135 默认）/ 12（120 默认）/ 72（半格）
+      quantity:     数量（默认 1）
+      unit:         '卷' / '盒' / '张'（默认 '卷'）
+      status:       '未使用' / '在机内' / '已退卷' / '已使用'（默认 '未使用'）
+      storage:      '冰箱-上层' / '防潮箱' / '常温柜'
+      purchase:     { 'date': '2026-05-20', 'price': 180, 'channel': '淘宝', 'currency': 'CNY' }
+      expiry:       '2028-03'（有效期）
+      purpose:      '人像' / '街拍' / '风光' / '夜景'（拍摄用途）
+      notes:        '这卷迫冲到 1600 用'（备注）
+    """
     start = time.time()
     user_id = _current_context["user_id"]
+    sid = _current_context["session_id"]
+    mid = _current_context["message_id"]
 
-    # 根据名称和格式自动推断张数
-    auto_frames = frames
-    if auto_frames is None and sheet_count is None:
-        fmt = (format or "135").strip()
-        if fmt == "135":
-            auto_frames = 36
-        elif fmt == "120":
-            auto_frames = 12  # 6x6 默认
-        elif fmt in ("4x5", "4×5", "5x7", "5×7", "8x10", "8×10"):
-            pass  # 大画幅默认不设 frames，用 sheet_count
-        elif fmt in ("半格", "half-frame"):
-            auto_frames = 72
+    data = data or {}
+    if "status" not in data:
+        data["status"] = "未使用"
 
-    fid = await db_add_film(
+    eid = await save_entity(
         user_id=user_id,
+        entity_type="film",
         name=name,
-        film_type=film_type,
-        iso=iso,
-        format=format,
-        frames=auto_frames,
-        sheet_count=sheet_count,
-        quantity=quantity,
-        purchase_date=purchase_date,
-        expiry_date=expiry_date,
-        purchase_price=price,
-        price=price,
-        storage_location=storage_location,
-        status=status,
-        meta=meta or {},
+        data=data,
     )
 
-    # 记录审计日志
+    # 审计日志
     await record_audit(
-        user_id=user_id,
-        session_id=_current_context["session_id"],
-        message_id=_current_context["message_id"],
-        operation="INSERT",
-        entity_type="film",
-        entity_id=fid,
-        sql_text="INSERT INTO film ...",
-        sql_params={"name": name, "quantity": quantity, "iso": iso},
-        data_after={"id": fid, "name": name, "quantity": quantity, "iso": iso},
-        rows_affected=1,
-        tool_name="add_film",
-        tool_args={"name": name, "quantity": quantity},
+        user_id=user_id, session_id=sid, message_id=mid,
+        operation="INSERT", entity_type="film", entity_id=eid,
+        sql_text="INSERT INTO entities (type=film)",
+        sql_params={"name": name, "data_keys": list(data.keys())},
+        data_after={"id": eid, "name": name, "data": data},
+        rows_affected=1, tool_name="film_add",
+        tool_args={"name": name, "data_keys": list(data.keys())},
         duration_ms=int((time.time() - start) * 1000),
     )
 
-    # 建立消息-实体关联
-    if _current_context["message_id"]:
-        await create_entity_link(
-            message_id=_current_context["message_id"],
-            entity_type="film",
-            entity_id=fid,
-            action="created",
-        )
+    # 消息-实体关联
+    if mid:
+        await create_entity_link(mid, "film", eid, "created")
 
     return {
-        "id": fid,
+        "id": eid,
         "name": name,
-        "quantity": quantity,
-        "iso": iso,
         "status": "ok",
-        "message": f"已添加胶卷: {name} × {quantity}"
+        "message": f"✅ 已添加胶卷: {name}",
     }
 
 
-async def query_film(filters: dict = None, order_by: str = "created_at",
-                     order_dir: str = "DESC", limit: int = 50) -> dict:
-    """查询胶卷库存"""
+async def film_query(filters: dict = None, limit: int = 50) -> dict:
+    """
+    查询胶卷库存。
+
+    支持任意字段过滤，例如：
+      {"status": "未使用", "iso": 400}
+      {"type": "彩色负片", "purchase.channel": "淘宝"}
+    不传 filters 则返回全部。
+    """
     user_id = _current_context["user_id"]
 
-    results = await db_query_film(
+    results = await query_entities(
         user_id=user_id,
+        entity_type="film",
         filters=filters,
-        order_by=order_by,
-        order_dir=order_dir,
         limit=limit,
     )
 
@@ -132,98 +125,161 @@ async def query_film(filters: dict = None, order_by: str = "created_at",
         "status": "ok",
         "count": len(results),
         "films": results,
-        "message": f"找到 {len(results)} 条胶卷记录"
+        "message": f"找到 {len(results)} 条胶卷记录",
     }
 
 
-async def update_film(film_id: str, **kwargs) -> dict:
-    """修改胶卷记录"""
+async def film_update(entity_id: str, data: dict = None, name: str = None) -> dict:
+    """
+    修改胶卷记录。
+
+    data 中只传入需要更新的字段即可，未传的字段保持不变。
+    例如：data = {"status": "已使用", "storage": "已冲扫区"}
+    """
     start = time.time()
     user_id = _current_context["user_id"]
+    sid = _current_context["session_id"]
+    mid = _current_context["message_id"]
 
     # 先查旧数据
-    old_data = await db_query_film(user_id, {"id": film_id})
-    data_before = old_data[0] if old_data else None
+    old = await get_entity(entity_id)
+    if not old:
+        return {"status": "error", "message": f"未找到该胶卷记录"}
 
-    await db_update_film(film_id, **kwargs)
+    # 合并 data
+    old_data = old.get("data") or {}
+    if data:
+        old_data.update(data)
 
-    # 查新数据
-    new_data = await db_query_film(user_id, {"id": film_id})
-    data_after = new_data[0] if new_data else None
+    new_name = name or old.get("name")
 
-    # 审计日志
-    await record_audit(
+    await save_entity(
         user_id=user_id,
-        session_id=_current_context["session_id"],
-        message_id=_current_context["message_id"],
-        operation="UPDATE",
         entity_type="film",
-        entity_id=film_id,
-        sql_text="UPDATE film ...",
-        sql_params=kwargs,
-        data_before=data_before,
-        data_after=data_after,
-        rows_affected=1,
-        tool_name="update_film",
-        tool_args=kwargs,
+        name=new_name,
+        data=old_data,
+        entity_id=entity_id,
+    )
+
+    # 审计
+    await record_audit(
+        user_id=user_id, session_id=sid, message_id=mid,
+        operation="UPDATE", entity_type="film", entity_id=entity_id,
+        sql_text="UPDATE entities (type=film)",
+        sql_params=data,
+        data_before=old.get("data"),
+        data_after=old_data,
+        rows_affected=1, tool_name="film_update",
+        tool_args={"entity_id": entity_id, "data": data},
         duration_ms=int((time.time() - start) * 1000),
     )
 
-    return {"status": "ok", "message": "胶卷记录已更新", "film": data_after}
+    return {
+        "status": "ok",
+        "message": "胶卷记录已更新",
+        "film": {"id": entity_id, "name": new_name, "data": old_data},
+    }
 
 
-async def delete_film(film_id: str, confirmed: bool = False) -> dict:
+async def film_delete(entity_id: str, confirmed: bool = False) -> dict:
     """删除胶卷记录（需确认）"""
     if not confirmed:
-        return {"status": "error",
-                "message": "需要用户确认后才能删除，请先展示胶卷信息并询问用户是否确认删除"}
+        old = await get_entity(entity_id)
+        name = old["name"] if old else "该胶卷"
+        return {
+            "status": "error",
+            "message": f"请确认是否删除「{name}」？再次调用时传 confirmed=true",
+        }
 
     start = time.time()
     user_id = _current_context["user_id"]
+    sid = _current_context["session_id"]
+    mid = _current_context["message_id"]
 
-    await db_delete_film(film_id)
+    await delete_entity(entity_id)
 
     await record_audit(
-        user_id=user_id,
-        session_id=_current_context["session_id"],
-        message_id=_current_context["message_id"],
-        operation="DELETE",
-        entity_type="film",
-        entity_id=film_id,
-        rows_affected=1,
-        tool_name="delete_film",
-        tool_args={"film_id": film_id},
+        user_id=user_id, session_id=sid, message_id=mid,
+        operation="DELETE", entity_type="film", entity_id=entity_id,
+        rows_affected=1, tool_name="film_delete",
+        tool_args={"entity_id": entity_id},
         duration_ms=int((time.time() - start) * 1000),
     )
 
     return {"status": "ok", "message": "胶卷记录已删除"}
 
 
-async def check_expiring_film() -> dict:
-    """检查即将过期或已过期的胶卷"""
+async def film_search(query: str, limit: int = 10) -> dict:
+    """
+    全文搜索胶卷（通过 FTS5）。
+
+    自然语言搜索，例如：
+      "Portra 400 人像"
+      "过期彩色负片"
+      "Kodak 135"
+    """
     user_id = _current_context["user_id"]
 
-    # 查所有胶卷
-    films = await db_query_film(user_id, limit=500)
-    today = datetime.now().date()
-    expiring = []
-    already_expired = []
+    results = await search_entities(
+        user_id=user_id,
+        query_text=query,
+        entity_type="film",
+        limit=limit,
+    )
 
-    for f in films:
-        if f.get("expiry_date"):
+    return {
+        "status": "ok",
+        "count": len(results),
+        "results": results,
+        "message": f"找到 {len(results)} 条相关胶卷",
+    }
+
+
+async def film_stats() -> dict:
+    """获取胶卷库存统计"""
+    from db.entity_store import get_stats
+    stats = await get_stats(_current_context["user_id"])
+    film_stats = stats.get("film", {})
+
+    return {
+        "status": "ok",
+        "stats": film_stats,
+        "message": (
+            f"📊 共有 {film_stats.get('count', 0)} 卷胶卷，"
+            f"总价值约 ¥{film_stats.get('total_price', 0):.0f}，"
+            f"已过期 {film_stats.get('expired', 0)} 卷"
+        ),
+    }
+
+
+async def film_check_expiry() -> dict:
+    """检查即将过期或已过期的胶卷"""
+    user_id = _current_context["user_id"]
+    from datetime import datetime
+
+    all_films = await query_entities(user_id, "film", limit=500)
+
+    today = datetime.now().date()
+    expired = []
+    expiring = []
+
+    for f in all_films:
+        data = f.get("data") or {}
+        exp_str = data.get("expiry")
+        if exp_str:
             try:
-                exp_date = datetime.fromisoformat(f["expiry_date"]).date()
-                days_left = (exp_date - today).days
-                if days_left < 0:
-                    already_expired.append({**f, "days_overdue": abs(days_left)})
-                elif days_left <= 30:
-                    expiring.append({**f, "days_left": days_left})
+                exp_date = datetime.strptime(str(exp_str)[:10], "%Y-%m-%d").date()
+                days = (exp_date - today).days
+                if days < 0:
+                    expired.append({**f, "days_overdue": abs(days)})
+                elif days <= 30:
+                    expiring.append({**f, "days_left": days})
             except (ValueError, TypeError):
                 pass
 
     return {
         "status": "ok",
-        "expired": already_expired,
+        "expired": expired,
         "expiring_soon": expiring,
-        "message": f"已过期: {len(already_expired)} 卷, 即将过期: {len(expiring)} 卷"
+        "message": f"已过期: {len(expired)} 卷，30天内过期: {len(expiring)} 卷",
     }

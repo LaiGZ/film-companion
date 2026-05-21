@@ -1,71 +1,93 @@
 name: shoot-management
-version: 1.0.0
-description: 拍摄记录管理 — 记录每次拍摄活动、装卷事件、设备出勤
+version: 2.0.0
+description: 拍摄记录管理 — 记录拍摄活动、装卷/退卷/拍完事件
 
 tools:
-  - name: add_shoot
-    handler: add_shoot
-    description: 创建拍摄记录。当用户说"去了/拍了/去××拍了"时调用。
+  - name: shoot_add
+    handler: shoot_add
+    description: |
+      创建拍摄记录。data 自由 JSON。
+
+      参考字段（全部可选）：
+        title:         '京都漫步'（标题）
+        shoot_date:    '2026-05-20'（拍摄日期，默认今天）
+        location:      '京都·岚山'（拍摄地点）
+        description:   '和友人一起扫街'（描述）
+        weather:       '晴' / '阴' / '雨' / '多云'
+        tags:          ['街拍', '人文', '京都']
+        rating:        1~5（星评价）
+        camera_used:   ['Leica M6', 'Nikon F3']
+        film_used:     ['Portra 400', 'Tri-X 400']
+        notes:         '整体偏暗，下次加半档曝光'
     parameters:
       - name: title
         type: string
         required: false
-        description: 拍摄活动名称，如"京都红枫"、"故宫游记"。可自动从对话推断
-      - name: shoot_date
-        type: string
+        description: 拍摄活动名称，如"京都红枫"。不传则自动用地点/日期命名
+      - name: data
+        type: object
         required: false
-        description: 拍摄日期，格式 YYYY-MM-DD。省略则默认为今天
-      - name: location
-        type: string
-        required: false
-        description: 拍摄地点，如"故宫博物院"、"颐和园"
-      - name: description
-        type: string
-        required: false
-        description: 拍摄笔记/描述
-      - name: tags
-        type: array
-        items: string
-        required: false
-        description: 标签，如["街拍", "旅行", "人像"]
-      - name: weather
-        type: string
-        required: false
-        description: 天气，如"晴"、"多云"、"阴"
+        description: 自由 JSON 数据，AI 决定字段
 
-  - name: query_shoot
-    handler: query_shoot
-    description: 查询拍摄记录。当用户说"拍的怎么样/最近拍了什么/查一下××的拍摄"时调用。
+  - name: shoot_query
+    handler: shoot_query
+    description: |
+      查询拍摄记录。支持任意 JSON 字段过滤。
+      示例：{"location": "京都"}、{"weather": "晴"}、{"shoot_date": "2026-05-20"}
     parameters:
-      - name: location__like
-        type: string
+      - name: filters
+        type: object
         required: false
-        description: 地点模糊匹配
-      - name: date_from
-        type: string
-        required: false
-        description: 起始日期 YYYY-MM-DD
-      - name: date_to
-        type: string
-        required: false
-        description: 结束日期 YYYY-MM-DD
+        description: 过滤条件。键是 data 中的字段路径。
       - name: limit
         type: integer
         required: false
-        description: 返回条数
+        description: 返回条数，默认 20
 
-  - name: load_film
-    handler: load_film
-    description: 记录装卷事件。当用户说"装了××卷到××相机"时调用。注意：装卷不扣库存。
+  - name: shoot_update
+    handler: shoot_update
+    description: 修改拍摄记录。只传入需要更新的字段。
+    parameters:
+      - name: entity_id
+        type: string
+        required: true
+        description: 要修改的实体 ID
+      - name: data
+        type: object
+        required: false
+        description: 要更新的字段（合并到现有 data）
+      - name: name
+        type: string
+        required: false
+        description: 新的名称（可选）
+
+  - name: shoot_delete
+    handler: shoot_delete
+    description: 删除拍摄记录。必须先确认。
+    parameters:
+      - name: entity_id
+        type: string
+        required: true
+        description: 要删除的实体 ID
+      - name: confirmed
+        type: boolean
+        required: false
+
+  - name: film_load
+    handler: film_load
+    description: |
+      记录装卷事件。把胶卷装进相机。
+      AI 自动查找库存中的胶卷和相机，关联创建 film_loading 实体。
+      注意：装卷不扣减库存，只改胶卷状态为"在机内"。
     parameters:
       - name: film_name
         type: string
         required: true
-        description: 胶卷名称，如"柯达金200"。系统会先查库存中是否有同名胶卷
+        description: 胶卷名称，系统会自动从库存中查找
       - name: camera_name
         type: string
         required: false
-        description: 相机名称，如"尼康FE"。系统会从设备库中查找
+        description: 相机名称，系统会自动从设备库中查找
       - name: iso_setting
         type: integer
         required: false
@@ -73,32 +95,34 @@ tools:
       - name: push_pull
         type: integer
         required: false
-        description: 迫冲档位，+1 迫冲一档，-1 减感一档，0 正常
+        description: 迫冲档位，+1 迫冲一档，-1 减感一档
       - name: shoot_title
         type: string
         required: false
-        description: 关联的拍摄活动名称。如果存在匹配的 shoot 则自动关联
+        description: 关联的拍摄活动名称
 
-  - name: unload_film
-    handler: unload_film
-    description: 记录退卷事件。当用户说"退卷/拿出来了/换卷/拍到一半拿出来了"时调用。
+  - name: film_unload
+    handler: film_unload
+    description: 记录退卷事件。自动查找该卷最新的"在机内"记录，标记为已退卷。
     parameters:
       - name: film_name
         type: string
         required: true
         description: 退卷的胶卷名称
-      - name: camera_name
-        type: string
-        required: false
-        description: 从哪台相机退卷。省略则查该卷最近的在机内记录
       - name: frames_shot
         type: integer
         required: false
         description: 这次拍了多少张
+      - name: camera_name
+        type: string
+        required: false
+        description: 从哪台相机退卷（默认查最近记录）
 
-  - name: finish_film
-    handler: finish_film
-    description: 标记胶卷已拍完。当用户说"拍完了/一卷拍完了/这卷拍完了"时调用。
+  - name: film_finish
+    handler: film_finish
+    description: |
+      标记胶卷已拍完。自动扣减库存 quantity - 1，
+      当库存为 0 时标记胶卷状态为"已使用"。
     parameters:
       - name: film_name
         type: string
@@ -108,20 +132,16 @@ tools:
         type: integer
         required: false
         description: 最后一次拍了多少张
-      - name: frames_total
-        type: integer
-        required: false
-        description: 这卷总共拍了多少张。省略则自动累加 history
 
-  - name: query_loading
-    handler: query_loading
-    description: 查询装卷状态。当用户说"相机里有什么卷/哪些卷还没拍完/机内有什么卷"时调用。
+  - name: film_loading_query
+    handler: film_loading_query
+    description: 查询装卷状态。当前哪些卷在机内、哪些已退卷。
     parameters:
       - name: status
         type: string
         required: false
         enum: ["在机内", "已退卷", "已拍完"]
-        description: 筛选状态，省略则查全部活跃状态
+        description: 筛选状态，默认"在机内"
       - name: camera_name
         type: string
         required: false
@@ -129,4 +149,17 @@ tools:
       - name: limit
         type: integer
         required: false
-        description: 返回条数
+        description: 返回条数，默认 20
+
+  - name: shoot_search
+    handler: shoot_search
+    description: 全文搜索拍摄记录。
+    parameters:
+      - name: query
+        type: string
+        required: true
+        description: 搜索关键词
+      - name: limit
+        type: integer
+        required: false
+        description: 返回条数，默认 10

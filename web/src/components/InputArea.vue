@@ -3,8 +3,9 @@
     <!-- 图片预览 -->
     <div v-if="images.length > 0" class="image-preview-bar">
       <div v-for="(img, i) in images" :key="i" class="image-preview-item">
-        <img :src="img" class="preview-thumb" />
-        <button class="remove-img" @click="removeImage(i)">✕</button>
+        <img :src="img.preview" class="preview-thumb" />
+        <span v-if="!img.url" class="upload-spinner"></span>
+        <button v-else class="remove-img" @click="removeImage(i)">✕</button>
       </div>
     </div>
     <div class="input-inner">
@@ -44,38 +45,77 @@
 import { ref } from 'vue'
 import { useChatStore } from '@/stores/chatStore'
 import { useChat } from '@/composables/useChat'
+import { useAuth } from '@/composables/useAuth'
 
 const store = useChatStore()
 const { sendMessage } = useChat()
+const { authFetch } = useAuth()
 const text = ref('')
+
+// 每个图片: { preview: dataURI (本地显示), url: string (上传后返回) }
 const images = ref([])
+const uploadingIds = ref(new Set())
 const fileInput = ref(null)
 
 function handleSend() {
   const msg = text.value.trim()
   if ((!msg || store.isLoading) && images.value.length === 0) return
   text.value = ''
-  const imgs = [...images.value]
+
+  // 提取已上传完成的 URL，未完成的过滤掉
+  const urls = images.value
+    .filter(img => img.url)
+    .map(img => img.url)
+
+  // 清空预览
   images.value = []
-  sendMessage(msg, imgs)
+  sendMessage(msg, urls)
 }
 
-function handleFileSelect(e) {
+async function handleFileSelect(e) {
   const files = e.target.files
   if (!files.length) return
   for (const file of files) {
     if (!file.type.startsWith('image/')) continue
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      images.value.push(ev.target.result)
+
+    // 本地预览用 ObjectURL（blob:），不是 base64
+    const preview = URL.createObjectURL(file)
+
+    // 先加入预览列表（显示缩略图），URL 为空表示上传中
+    const entry = { preview, url: '' }
+    images.value.push(entry)
+    const idx = images.value.length - 1
+
+    // 异步上传到服务器
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const resp = await authFetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+        // 不设 Content-Type，让浏览器自动设 multipart/form-data + boundary
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        // 补上 URL
+        entry.url = data.url
+      } else {
+        removeImage(idx)
+      }
+    } catch {
+      removeImage(idx)
     }
-    reader.readAsDataURL(file)
   }
   // 重置 input 以便重复选择同一文件
   fileInput.value.value = ''
 }
 
 function removeImage(index) {
+  const img = images.value[index]
+  // 释放 ObjectURL 避免内存泄漏
+  if (img && img.preview && img.preview.startsWith('blob:')) {
+    URL.revokeObjectURL(img.preview)
+  }
   images.value.splice(index, 1)
 }
 
@@ -139,6 +179,18 @@ function autoResize(e) {
   align-items: center;
   justify-content: center;
   padding: 0;
+}
+.upload-spinner {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  background: var(--surface);
+  animation: spin 0.6s linear infinite;
 }
 
 .input-inner {

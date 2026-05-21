@@ -1,150 +1,116 @@
 name: film-management
-version: 1.0.0
-description: 胶卷管理 — 记录、查询、修改、删除胶卷库存
+version: 2.0.0
+description: 胶卷管理 — JSONB 灵活存储，AI 自由定义字段
 
 tools:
-  - name: add_film
-    handler: add_film
-    description: 添加一条胶卷记录到库存。当用户说"买了/入了/到了 ×× 卷"时调用。
+  - name: film_add
+    handler: film_add
+    description: |
+      添加胶卷记录。核心工具。
+
+      data 是自由 JSON 对象，AI 根据对话内容决定存什么字段。
+      参考字段（全部可选，不限于这些）：
+        type:         '彩色负片' / '反转片' / '黑白负片' / '电影卷' ...
+        brand:        'Kodak' / 'Fuji' / 'Ilford' / 'Lomography' ...
+        iso:          100 / 200 / 400 / 800 / 1600 / 3200（数字）
+        format:       '135' / '120' / '4×5' / '8×10' / '半格' / '110' ...
+        frames:       36（135 默认）/ 12（120 默认）/ 72（半格）
+        quantity:     数量（数字，默认 1）
+        unit:         '卷' / '盒' / '张'（默认 '卷'）
+        status:       '未使用' / '在机内' / '已退卷' / '已使用'（默认 '未使用'）
+        storage:      '冰箱-上层' / '防潮箱' / '常温柜'
+        purchase:     {'date': '2026-05-20', 'price': 180, 'channel': '淘宝'}
+        expiry:       '2028-03'（有效期，YYYY-MM 格式）
+        purpose:      '人像' / '街拍' / '风光' / '夜景'（拍摄用途）
+        notes:        '这卷迫冲到 1600 用'（备注）
     parameters:
       - name: name
         type: string
         required: true
-        description: 胶卷型号名称，如"富士 Provia 100F"、"柯达 Portra 400"、"伊尔福 HP5"
-      - name: quantity
-        type: integer
-        required: false
-        description: 数量（卷），默认为 1
-      - name: iso
-        type: integer
-        required: false
-        description: 感光度，如 100、400、800
-      - name: film_type
-        type: string
-        required: false
-        enum: ["彩色反转片", "彩色负片", "黑白负片", "电影卷"]
-        description: 胶卷类型。如果不确定可以留空，用 name 推断
-      - name: format
-        type: string
-        required: false
-        enum: ["135", "120", "半格", "110", "126", "127", "4x5", "5x7", "8x10", "20x24"]
-        description: 胶卷格式（135 / 120 / 半格 / 4×5 / 5×7 / 8×10）
-      - name: frames
-        type: integer
-        required: false
-        description: 张数。135默认36张，120默认12张（6×6），半格默认72。大画幅散页用 sheet_count
-      - name: sheet_count
-        type: integer
-        required: false
-        description: 散页片张数（大画幅 4×5 / 8×10 按盒卖时用，如 50 张一盒）
-      - name: purchase_date
-        type: string
-        required: false
-        description: 购买日期，格式 YYYY-MM-DD
-      - name: expiry_date
-        type: string
-        required: false
-        description: 到期日，格式 YYYY-MM-DD。用户提到"过期的"、"有效期"时就填
-      - name: price
-        type: number
-        required: false
-        description: 买入单价（元）
-      - name: storage_location
-        type: string
-        required: false
-        description: 存放位置，如"冰箱"、"书房"
-      - name: status
-        type: string
-        required: false
-        enum: ["未使用", "已拍摄", "已冲洗", "已扫描", "已使用"]
-        description: 胶卷状态，默认为"未使用"
-      - name: meta
+        description: 胶卷名称，如"Kodak Portra 400"、"富士 C200"
+      - name: data
         type: object
         required: false
-        description: 扩展信息（JSON 对象）。放所有不匹配以上字段的信息。例如：{"store":"厦门中山路", "note":"拍风光用", "batch":"202305"}
+        description: |
+          自由 JSON 数据。所有字段由 AI 根据对话内容决定。
+          支持嵌套对象（如 purchase: {channel, price, date}）。
+          不要存 name 和 entity_type，系统自动处理。
 
-  - name: query_film
-    handler: query_film
-    description: 查询胶卷库存。支持多种过滤条件。当用户说"有哪些/查一下/看看/还有多少 / ISO ××"时调用。
+  - name: film_query
+    handler: film_query
+    description: |
+      查询胶卷库存。支持任意 JSON 字段过滤。
+
+      示例：
+        {"status": "未使用", "iso": 400}
+        {"type": "彩色负片", "purchase.channel": "淘宝"}
+        {}  ← 不传 filters = 返回全部
     parameters:
       - name: filters
         type: object
         required: false
-        description: 过滤条件。例如 {"film_type":"彩色反转片", "iso__gte":400, "status":"未使用", "name__ilike":"Prova"}
-      - name: order_by
-        type: string
-        required: false
-        enum: ["created_at", "name", "iso", "expiry_date", "quantity", "price"]
-        description: 排序字段，默认 created_at
-      - name: order_dir
-        type: string
-        required: false
-        enum: ["ASC", "DESC"]
-        description: 排序方向，默认 DESC
+        description: |
+          过滤条件字典。键是 data 中的字段路径，值是精确匹配值。
+          支持嵌套路径如 "purchase.channel"。
       - name: limit
         type: integer
         required: false
-        description: 返回条数上限，默认 50
+        description: 返回条数，默认 50
 
-  - name: update_film
-    handler: update_film
-    description: 修改胶卷记录。当用户说"改成/补充/更新/用了一卷/拍完了"时调用。
+  - name: film_update
+    handler: film_update
+    description: |
+      修改胶卷记录。只传入需要更新的字段。
+      例如：data = {"status": "已使用", "storage": "冲扫区"}
     parameters:
-      - name: film_id
+      - name: entity_id
         type: string
         required: true
-        description: 要修改的胶卷 ID（从查询结果中获取）
+        description: 要修改的实体 ID
+      - name: data
+        type: object
+        required: false
+        description: |
+          要更新的字段。与 data 合并（只覆盖同名键，不删除未传的字段）。
       - name: name
         type: string
         required: false
-        description: 新的型号名称
-      - name: quantity
-        type: integer
-        required: false
-        description: 新的数量
-      - name: iso
-        type: integer
-        required: false
-        description: 新的感光度
-      - name: film_type
-        type: string
-        required: false
-        description: 新的胶卷类型
-      - name: format
-        type: string
-        required: false
-        description: 新的格式
-      - name: status
-        type: string
-        required: false
-        description: 新的状态（未使用/已拍摄/已冲洗/已扫描/已使用）
-      - name: storage_location
-        type: string
-        required: false
-        description: 新的存放位置
-      - name: price
-        type: number
-        required: false
-        description: 新的价格
-      - name: meta
-        type: object
-        required: false
-        description: 要补充或更新的扩展信息。会合并到已有 meta 中。
+        description: 新的名称（可选）
 
-  - name: delete_film
-    handler: delete_film
-    description: 删除胶卷记录。当用户说"删掉/移除/取消"时调用。注意：删除前必须先查询确认。
+  - name: film_delete
+    handler: film_delete
+    description: 删除胶卷记录。必须先查询确认。
     parameters:
-      - name: film_id
+      - name: entity_id
         type: string
         required: true
-        description: 要删除的胶卷 ID
+        description: 要删除的实体 ID
       - name: confirmed
         type: boolean
         required: false
-        description: 用户是否明确确认删除。必须确认后才执行。
+        description: 用户确认后才传 true
 
-  - name: check_expiring_film
-    handler: check_expiring_film
-    description: 检查即将过期或已过期的胶卷。当用户说"快过期的"、"要过期了"、"什么时候过期"时调用。
+  - name: film_search
+    handler: film_search
+    description: |
+      全文搜索胶卷（FTS5）。自然语言查询，不需要精确匹配。
+      示例："Portra 400 人像"、"过期彩色负片"、"Kodak 135"
+    parameters:
+      - name: query
+        type: string
+        required: true
+        description: 搜索关键词
+      - name: limit
+        type: integer
+        required: false
+        description: 返回条数，默认 10
+
+  - name: film_stats
+    handler: film_stats
+    description: 获取胶卷库存统计概览（总数、总价值、过期数量）
+    parameters: []
+
+  - name: film_check_expiry
+    handler: film_check_expiry
+    description: 检查即将过期（30天内）和已过期的胶卷
     parameters: []

@@ -55,6 +55,11 @@ async def init() -> tuple:
     registry.load_plugins(plugin_dir)
     print(f"✅ 插件加载完成: {len(registry.tools)} 个工具")
 
+    # 4. 初始化 entity_store（建表 + FTS，幂等）
+    from db.entity_store import init_entity_store
+    await init_entity_store()
+    print("✅ 实体存储就绪 (entities + FTS5)")
+
     return provider, registry
 
 

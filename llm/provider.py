@@ -46,9 +46,13 @@ def load_config() -> LLMConfig:
     cfg.provider = os.getenv("LLM_PROVIDER", cfg.provider)
     cfg.model = os.getenv("LLM_MODEL", cfg.model)
 
-    # API Key
-    api_key_env = f"{cfg.provider.upper()}_API_KEY"
-    cfg.api_key = os.getenv(api_key_env, os.getenv("OPENAI_API_KEY", ""))
+    # API Key — 环境变量覆盖 config.yaml，但只在环境变量实际存在时才覆盖
+    api_key_env_name = f"{cfg.provider.upper()}_API_KEY"
+    env_api_key = os.getenv(api_key_env_name)
+    if env_api_key:
+        cfg.api_key = env_api_key
+    elif not cfg.api_key:
+        cfg.api_key = os.getenv("OPENAI_API_KEY", "")
 
     return cfg
 

@@ -10,7 +10,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request, Depends
+from fastapi import FastAPI, HTTPException, Query, Request, Depends, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -85,6 +85,11 @@ if os.path.exists(dist_dir):
 else:
     print(f"📦 前端: 开发模式 (静态文件)")
 app.mount("/assets", StaticFiles(directory=os.path.join(static_dir, "assets")), name="assets")
+
+# 上传文件存储
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # 注册认证路由
 from web.auth import router as auth_router, get_current_user
@@ -244,6 +249,29 @@ async def delete_session(
     await execute("DELETE FROM chat_message WHERE session_id = ?", session_id)
     await execute("DELETE FROM chat_session WHERE id = ?", session_id)
     return {"status": "ok", "deleted": session_id}
+
+
+@app.post("/api/upload")
+async def upload_image(
+    file: UploadFile = File(...),
+    request: Request = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """上传图片 —— 返回完整可访问 URL（Doubao API 需要 http/https）"""
+    import uuid
+    ext = os.path.splitext(file.filename or "image.jpg")[1] or ".jpg"
+    filename = f"{uuid.uuid4()}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    content = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    # 构造完整 URL（Doubao API 不支持相对路径）
+    base = str(request.base_url).rstrip("/")
+    url = f"{base}/uploads/{filename}"
+
+    print(f"🖼️ 图片已上传: {filename} ({len(content)} bytes)")
+    return {"status": "ok", "url": url, "filename": filename}
 
 
 # ============================================================
@@ -501,42 +529,65 @@ async def list_film(
     limit: int = Query(100),
     current_user: dict = Depends(get_current_user),
 ):
-    """查询胶卷列表"""
-    from db.schema import query_film
+    """查询胶卷列表（基于 entities 统一存储）"""
+    from db.entity_store import query_entities
 
     user_id = current_user["id"]
+
+    # 实体查询（精确匹配）
     filters = {}
-    if film_type:
-        filters["film_type"] = film_type
     if status:
         filters["status"] = status
-    if iso_min:
-        filters["iso__gte"] = iso_min
+    if film_type:
+        filters["type"] = film_type
 
-    result = await query_film(
+    result = await query_entities(
         user_id=user_id,
-        filters=filters,
+        entity_type="film",
+        filters=filters if filters else None,
         order_by=sort,
         order_dir=order,
-        limit=limit,
+        limit=limit * 2,  # 多取一些用于后过滤
     )
 
-    # 装饰结果：加入过期状态
+    # 将 data JSON 展平为前端可读的 flat 格式
+    flat_results = []
     from datetime import datetime
     today = datetime.now().date()
-    for f in result:
-        if f.get("expiry_date"):
+    for e in result:
+        d = e.get("data") or {}
+        if iso_min and (d.get("iso") is None or d.get("iso") < iso_min):
+            continue
+        flat = {
+            "id": e["id"],
+            "name": e["name"],
+            "film_type": d.get("type"),
+            "iso": d.get("iso"),
+            "format": d.get("format"),
+            "quantity": d.get("quantity", 1),
+            "status": d.get("status", "未使用"),
+            "price": d.get("purchase", {}).get("price") if isinstance(d.get("purchase"), dict) else d.get("price"),
+            "purchase_date": d.get("purchase", {}).get("date") if isinstance(d.get("purchase"), dict) else None,
+            "expiry_date": d.get("expiry"),
+            "storage_location": d.get("storage"),
+            "created_at": e["created_at"],
+            "updated_at": e["updated_at"],
+        }
+        # 过期状态
+        if flat.get("expiry_date"):
             try:
-                exp = datetime.fromisoformat(f["expiry_date"]).date()
+                exp = datetime.fromisoformat(str(flat["expiry_date"])[:10]).date()
                 days = (exp - today).days
-                f["expiry_status"] = "expired" if days < 0 else "expiring" if days <= 30 else "ok"
-                f["days_left"] = days
+                flat["expiry_status"] = "expired" if days < 0 else "expiring" if days <= 30 else "ok"
+                flat["days_left"] = days
             except (ValueError, TypeError):
-                f["expiry_status"] = "unknown"
+                flat["expiry_status"] = "unknown"
         else:
-            f["expiry_status"] = "unknown"
+            flat["expiry_status"] = "unknown"
 
-    return {"status": "ok", "count": len(result), "films": result}
+        flat_results.append(flat)
+
+    return {"status": "ok", "count": len(flat_results), "films": flat_results[:limit]}
 
 
 @app.get("/api/gear")
@@ -549,10 +600,11 @@ async def list_gear(
     limit: int = Query(100),
     current_user: dict = Depends(get_current_user),
 ):
-    """查询设备列表"""
-    from db.schema import query_gear
+    """查询设备列表（基于 entities 统一存储）"""
+    from db.entity_store import query_entities
 
     user_id = current_user["id"]
+
     filters = {}
     if gear_type:
         filters["gear_type"] = gear_type
@@ -561,64 +613,67 @@ async def list_gear(
     if status:
         filters["status"] = status
 
-    result = await query_gear(
+    result = await query_entities(
         user_id=user_id,
-        filters=filters,
+        entity_type="gear",
+        filters=filters if filters else None,
         order_by=sort,
         order_dir=order,
         limit=limit,
     )
 
-    return {"status": "ok", "count": len(result), "gear": result}
+    # 将 data JSON 展平
+    flat_results = []
+    for e in result:
+        d = e.get("data") or {}
+        flat = {
+            "id": e["id"],
+            "name": e["name"],
+            "gear_type": d.get("gear_type"),
+            "brand": d.get("brand"),
+            "model": d.get("model"),
+            "nickname": d.get("nickname"),
+            "category": d.get("category"),
+            "condition": d.get("condition"),
+            "status": d.get("status", "在用"),
+            "price": d.get("purchase", {}).get("price") if isinstance(d.get("purchase"), dict) else d.get("price"),
+            "purchase_date": d.get("purchase", {}).get("date") if isinstance(d.get("purchase"), dict) else None,
+            "storage_location": d.get("storage"),
+            "serial_number": d.get("serial_number"),
+            "lens_mount": d.get("lens_mount"),
+            "camera_type": d.get("camera_type"),
+            "format_support": d.get("format_support"),
+            "created_at": e["created_at"],
+            "updated_at": e["updated_at"],
+        }
+        flat_results.append(flat)
+
+    return {"status": "ok", "count": len(flat_results), "gear": flat_results[:limit]}
 
 
 @app.get("/api/stats")
 async def get_stats(current_user: dict = Depends(get_current_user)):
-    """获取统计数据"""
-    from db.schema import query_film, query_gear
+    """获取统计数据（基于 entities 统一存储）"""
+    from db.entity_store import get_stats as entity_stats
 
     user_id = current_user["id"]
-    films = await query_film(user_id, limit=10000)
-    gear_list = await query_gear(user_id, limit=10000)
+    stats = await entity_stats(user_id)
 
-    film_count = len(films)
-    gear_count = len(gear_list)
-    total_film_price = sum((f.get("price") or 0) for f in films)
-    total_gear_price = sum((g.get("price") or 0) for g in gear_list)
-
-    from collections import Counter
-    film_types = Counter(f.get("film_type") or "未分类" for f in films)
-    gear_types = Counter(g.get("gear_type") or "未分类" for g in gear_list)
-    film_statuses = Counter(f.get("status") or "未知" for f in films)
-
-    from datetime import datetime
-    today = datetime.now().date()
-    expired = 0
-    expiring = 0
-    for f in films:
-        if f.get("expiry_date"):
-            try:
-                exp = datetime.fromisoformat(f["expiry_date"]).date()
-                days = (exp - today).days
-                if days < 0:
-                    expired += 1
-                elif days <= 30:
-                    expiring += 1
-            except (ValueError, TypeError):
-                pass
+    film = stats.get("film", {})
+    gear = stats.get("gear", {})
 
     return {
         "status": "ok",
         "stats": {
-            "film_count": film_count,
-            "gear_count": gear_count,
-            "total_film_price": total_film_price,
-            "total_gear_price": total_gear_price,
-            "total_value": total_film_price + total_gear_price,
-            "film_types": dict(film_types),
-            "gear_types": dict(gear_types),
-            "film_statuses": dict(film_statuses),
-            "expired_count": expired,
-            "expiring_count": expiring,
+            "film_count": film.get("count", 0),
+            "gear_count": gear.get("count", 0),
+            "total_film_price": film.get("total_price", 0),
+            "total_gear_price": gear.get("total_price", 0),
+            "total_value": film.get("total_price", 0) + gear.get("total_price", 0),
+            "film_types": film.get("statuses", {}),
+            "gear_types": {},
+            "film_statuses": film.get("statuses", {}),
+            "expired_count": film.get("expired", 0),
+            "expiring_count": 0,
         }
     }
